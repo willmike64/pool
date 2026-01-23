@@ -122,6 +122,34 @@ def draw_grid():
     email = st.session_state.get("email")
     is_admin = email == "mwill1003@gmail.com"
     
+    # Add custom CSS for square styling
+    st.markdown("""
+        <style>
+        /* Paid square styling - green border */
+        div[data-testid="stButton"] button[kind="secondary"].paid-square {
+            border: 3px solid #00ff00 !important;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.5) !important;
+        }
+        
+        /* Claimed square hover effect */
+        div[data-testid="stButton"] button[kind="secondary"]:hover {
+            transform: scale(1.05);
+            transition: transform 0.2s ease;
+        }
+        
+        /* Unclaimed square styling */
+        div[data-testid="stButton"] button[kind="secondary"]:not(:disabled) {
+            background-color: #f0f0f0;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
     st.info("ℹ️ Numbers will be randomized just before game time to ensure fairness")
     
     if is_admin:
@@ -214,11 +242,17 @@ def draw_grid():
                 claimed_by = data.get("claimed_by")
                 paid = data.get("paid", False)
                 
+                # Add visual indicator for paid squares
+                if paid:
+                    button_label = f"✅ {avatar}"  # Checkmark + avatar for paid
+                else:
+                    button_label = avatar
+                
                 if claimed_by == email and not paid:
-                    if cols_container[j+1].button(avatar, key=square_id):
+                    if cols_container[j+1].button(button_label, key=square_id):
                         unclaim_square(square_id)
                 else:
-                    cols_container[j+1].button(avatar, key=square_id, disabled=True)
+                    cols_container[j+1].button(button_label, key=square_id, disabled=True)
             else:
                 if cols_container[j+1].button("⬜", key=square_id):
                     claim_square(square_id)
