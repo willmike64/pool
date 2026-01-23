@@ -5,6 +5,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 import pyrebase
 import random
 import requests
+from datetime import datetime, timezone
 
 # --------------- Firebase Setup -----------------
 firebaseConfig = {
@@ -225,12 +226,24 @@ def main():
 def show_odds_ticker():
     st.markdown("### 🎰 Current Super Bowl Odds")
     
+    # Calculate time until Super Bowl LIX - Feb 9, 2025, 6:30 PM ET
+    game_time = datetime(2025, 2, 9, 18, 30, tzinfo=timezone.utc).replace(hour=23, minute=30)  # 6:30 PM ET = 11:30 PM UTC
+    now = datetime.now(timezone.utc)
+    time_diff = game_time - now
+    
+    if time_diff.total_seconds() > 0:
+        days = time_diff.days
+        hours = time_diff.seconds // 3600
+        countdown = f"⏰ {days} days, {hours} hours until kickoff"
+    else:
+        countdown = "🏈 GAME TIME!"
+    
     odds_data = fetch_superbowl_odds()
     
     if odds_data:
-        odds_text = " • ".join(odds_data) + " • "
+        odds_text = countdown + " • " + " • ".join(odds_data) + " • "
     else:
-        odds_text = "Super Bowl LIX • Feb 9, 2025 • Caesars Superdome, New Orleans • Loading odds... • "
+        odds_text = countdown + " • Super Bowl LIX • Feb 9, 2025 • Caesars Superdome, New Orleans • "
     
     st.markdown(
         f"""
