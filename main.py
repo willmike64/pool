@@ -348,6 +348,51 @@ def show_user_stats():
     squares = db.collection("squares").where(filter=FieldFilter("claimed_by", "==", email)).stream()
     claimed = [s.id for s in squares]
     
+    # Avatar Picker - only if user has claimed squares
+    if claimed:
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 🎨 Change Your Avatar")
+        
+        # Get all squares to find taken avatars
+        all_squares = get_all_squares()
+        
+        # Find avatars used by OTHER players
+        taken_avatars = set()
+        current_user_avatar = None
+        for square_id, data in all_squares.items():
+            avatar = data.get("avatar")
+            claimed_by = data.get("claimed_by")
+            if claimed_by == email:
+                current_user_avatar = avatar
+            elif claimed_by != email:
+                taken_avatars.add(avatar)
+        
+        # Available avatars = all avatars minus ones taken by others
+        available_avatars = [a for a in AVATARS if a not in taken_avatars]
+        
+        # Find current avatar index
+        try:
+            current_index = available_avatars.index(current_user_avatar)
+        except ValueError:
+            current_index = 0
+        
+        selected_avatar = st.sidebar.selectbox(
+            "Pick your icon:",
+            available_avatars,
+            index=current_index,
+            key="avatar_picker"
+        )
+        
+        if selected_avatar != current_user_avatar:
+            if st.sidebar.button("Update Avatar"):
+                # Update all user's squares with new avatar
+                for square_id in claimed:
+                    db.collection("squares").document(square_id).update({"avatar": selected_avatar})
+                get_all_squares.clear()
+                st.sidebar.success(f"Avatar changed to {selected_avatar}!")
+                st.rerun()
+    
+    st.sidebar.markdown("---")
     st.sidebar.markdown("### 💰 Payment")
     amount = len(claimed) * 10
     if amount > 0:
