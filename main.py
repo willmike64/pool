@@ -184,7 +184,18 @@ def draw_grid():
 
 def claim_square(square_id):
     email = st.session_state.get("email")
-    avatar = get_user_avatar(email)
+    
+    # Check if user already has squares and reuse their avatar
+    all_squares = get_all_squares()
+    existing_avatar = None
+    for sid, data in all_squares.items():
+        if data.get("claimed_by") == email:
+            existing_avatar = data.get("avatar")
+            break
+    
+    # Use existing avatar or generate new one
+    avatar = existing_avatar if existing_avatar else get_user_avatar(email)
+    
     square_ref = db.collection("squares").document(square_id)
     if square_ref.get().exists:
         st.warning("Already claimed!")
