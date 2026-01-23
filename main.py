@@ -96,7 +96,8 @@ def get_game_config():
             "side_team": "AFC Team",
             "top_numbers": list(range(10)),
             "side_numbers": list(range(10)),
-            "numbers_randomized": False
+            "numbers_randomized": False,
+            "winners": {"Q1": None, "Q2": None, "Q3": None, "Final": None}
         }
         config_ref.set(default_config)
         return default_config
@@ -144,6 +145,37 @@ def draw_grid():
             })
             st.success("✅ Numbers randomized!")
             st.rerun()
+        
+        # Winner Assignment
+        st.markdown("---")
+        st.markdown("### 🏆 Assign Quarter Winners")
+        winners = config.get("winners", {"Q1": None, "Q2": None, "Q3": None, "Final": None})
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            q1_nfc = st.number_input("Q1 - NFC Score (last digit)", 0, 9, value=winners.get("Q1", {}).get("nfc", 0) if winners.get("Q1") else 0, key="q1_nfc")
+            q1_afc = st.number_input("Q1 - AFC Score (last digit)", 0, 9, value=winners.get("Q1", {}).get("afc", 0) if winners.get("Q1") else 0, key="q1_afc")
+            if st.button("Set Q1 Winner"):
+                set_quarter_winner("Q1", q1_nfc, q1_afc, top_numbers, side_numbers)
+        
+        with col2:
+            q2_nfc = st.number_input("Q2 - NFC Score (last digit)", 0, 9, value=winners.get("Q2", {}).get("nfc", 0) if winners.get("Q2") else 0, key="q2_nfc")
+            q2_afc = st.number_input("Q2 - AFC Score (last digit)", 0, 9, value=winners.get("Q2", {}).get("afc", 0) if winners.get("Q2") else 0, key="q2_afc")
+            if st.button("Set Q2 Winner"):
+                set_quarter_winner("Q2", q2_nfc, q2_afc, top_numbers, side_numbers)
+        
+        col3, col4 = st.columns(2)
+        with col3:
+            q3_nfc = st.number_input("Q3 - NFC Score (last digit)", 0, 9, value=winners.get("Q3", {}).get("nfc", 0) if winners.get("Q3") else 0, key="q3_nfc")
+            q3_afc = st.number_input("Q3 - AFC Score (last digit)", 0, 9, value=winners.get("Q3", {}).get("afc", 0) if winners.get("Q3") else 0, key="q3_afc")
+            if st.button("Set Q3 Winner"):
+                set_quarter_winner("Q3", q3_nfc, q3_afc, top_numbers, side_numbers)
+        
+        with col4:
+            final_nfc = st.number_input("Final - NFC Score (last digit)", 0, 9, value=winners.get("Final", {}).get("nfc", 0) if winners.get("Final") else 0, key="final_nfc")
+            final_afc = st.number_input("Final - AFC Score (last digit)", 0, 9, value=winners.get("Final", {}).get("afc", 0) if winners.get("Final") else 0, key="final_afc")
+            if st.button("Set Final Winner"):
+                set_quarter_winner("Final", final_nfc, final_afc, top_numbers, side_numbers)
     
     top_numbers = config.get("top_numbers", list(range(10)))
     side_numbers = config.get("side_numbers", list(range(10)))
@@ -179,6 +211,22 @@ def draw_grid():
                     claim_square(square_id)
     
     st.markdown(f"### ↑ {config.get('side_team', 'AFC Team')}")
+    
+    # Display Winners
+    winners = config.get("winners", {})
+    if any(winners.values()):
+        st.markdown("---")
+        st.markdown("### 🏆 Quarter Winners")
+        winner_cols = st.columns(4)
+        for idx, (quarter, data) in enumerate([("Q1", winners.get("Q1")), ("Q2", winners.get("Q2")), ("Q3", winners.get("Q3")), ("Final", winners.get("Final"))]):
+            with winner_cols[idx]:
+                if data:
+                    st.markdown(f"**{quarter}**")
+                    st.markdown(f"{data.get('winner_avatar', '❓')} {data.get('winner_email', 'Unclaimed').split('@')[0]}")
+                    st.markdown(f"Score: {data.get('nfc', 0)}-{data.get('afc', 0)}")
+                else:
+                    st.markdown(f"**{quarter}**")
+                    st.markdown("Not set")
 
 # --------------- Claim Logic -----------------
 
@@ -223,6 +271,41 @@ def unclaim_square(square_id):
     else:
         st.session_state.confirm_unclaim = square_id
         st.warning(f"Click again to confirm removing square {square_id}")
+
+def set_quarter_winner(quarter, nfc_score, afc_score, top_numbers, side_numbers):
+    # Find the winning square based on scores
+    try:
+        nfc_col = top_numbers.index(nfc_score)
+        afc_row = side_numbers.index(afc_score)
+        winning_square_id = f"{afc_row}-{nfc_col}"
+        
+        # Get the square data
+        all_squares = get_all_squares()
+        if winning_square_id in all_squares:
+            winner_data = all_squares[winning_square_id]
+            winner_email = winner_data.get("claimed_by", "Unclaimed")
+            winner_avatar = winner_data.get("avatar", "❓")
+        else:
+            winner_email = "Unclaimed"
+            winner_avatar = "❓"
+        
+        # Update config with winner info
+        config_ref = db.collection("config").document("game")
+        config = config_ref.get().to_dict()
+        winners = config.get("winners", {})
+        winners[quarter] = {
+            "nfc": nfc_score,
+            "afc": afc_score,
+            "square_id": winning_square_id,
+            "winner_email": winner_email,
+            "winner_avatar": winner_avatar
+        }
+        config_ref.update({"winners": winners})
+        
+        st.success(f"{quarter} Winner: {winner_avatar} {winner_email.split('@')[0]} (Square {nfc_score}-{afc_score})")
+        st.rerun()
+    except ValueError:
+        st.error("Invalid score - number not found in grid!")
 
 # --------------- Main App -----------------
 
