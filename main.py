@@ -5,7 +5,8 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 import pyrebase
 import random
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
+import pytz
 
 # --------------- Firebase Setup -----------------
 firebaseConfig = {
@@ -227,8 +228,9 @@ def show_odds_ticker():
     st.markdown("### 🎰 Current Super Bowl Odds")
     
     # Calculate time until Super Bowl LIX - Feb 9, 2025, 6:30 PM ET
-    game_time = datetime(2025, 2, 9, 18, 30, tzinfo=timezone.utc).replace(hour=23, minute=30)  # 6:30 PM ET = 11:30 PM UTC
-    now = datetime.now(timezone.utc)
+    eastern = pytz.timezone('US/Eastern')
+    game_time = eastern.localize(datetime(2025, 2, 9, 18, 30))
+    now = datetime.now(pytz.UTC)
     time_diff = game_time - now
     
     if time_diff.total_seconds() > 0:
