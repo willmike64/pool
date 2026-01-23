@@ -259,6 +259,16 @@ def draw_grid():
     
     st.markdown(f"### ↑ {config.get('side_team', 'AFC Team')}")
     
+    # Display Payouts
+    st.markdown("---")
+    st.markdown("### 💰 Prize Payouts")
+    payout_cols = st.columns(4)
+    payouts = [("Q1", "$100"), ("Q2", "$150"), ("Q3", "$250"), ("Final", "$500")]
+    for idx, (quarter, amount) in enumerate(payouts):
+        with payout_cols[idx]:
+            st.markdown(f"**{quarter}**")
+            st.markdown(f"<h2 style='text-align: center; color: #00ff00;'>{amount}</h2>", unsafe_allow_html=True)
+    
     # Display Winners
     winners = config.get("winners", {})
     if any(winners.values()):
