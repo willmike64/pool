@@ -1,0 +1,32 @@
+# Secrets and credentials
+secrets.toml
+.streamlit/secrets.toml
+.streamlit/firebase_credentials.json
+*.json
+!package*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+pool/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/config.toml
