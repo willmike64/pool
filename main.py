@@ -378,9 +378,9 @@ def main():
 def show_odds_ticker():
     st.markdown("### 🎰 Current Super Bowl Odds")
     
-    # Calculate time until Super Bowl LIX - Feb 9, 2025, 6:30 PM ET
+    # Calculate time until Super Bowl LX - Feb 8, 2026, 6:30 PM ET
     eastern = pytz.timezone('US/Eastern')
-    game_time = eastern.localize(datetime(2025, 2, 9, 18, 30))
+    game_time = eastern.localize(datetime(2026, 2, 8, 18, 30))
     now = datetime.now(pytz.UTC)
     time_diff = game_time - now
     
@@ -396,7 +396,7 @@ def show_odds_ticker():
     if odds_data:
         odds_text = countdown + " • " + " • ".join(odds_data) + " • "
     else:
-        odds_text = countdown + " • Super Bowl LIX • Feb 9, 2025 • Caesars Superdome, New Orleans • "
+        odds_text = countdown + " • Super Bowl LX • Feb 8, 2026 • Caesars Superdome, New Orleans • "
     
     st.markdown(
         f"""
