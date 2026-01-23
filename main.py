@@ -218,12 +218,11 @@ def main():
         login_user()
         return
     st.sidebar.write(f"👤 {st.session_state.email}")
+    show_odds_ticker()
     draw_grid()
     show_user_stats()
-    show_odds_ticker()
 
 def show_odds_ticker():
-    st.markdown("---")
     st.markdown("### 🎰 Current Super Bowl Odds")
     
     odds_data = fetch_superbowl_odds()
