@@ -627,7 +627,11 @@ def play_2048_football():
         **Goal:** Reach the 🏁 (2048) tile!
         
         **Rules:**
-        - Use arrow buttons to slide tiles
+        - **ALL tiles slide together** in the arrow direction
+        - ⬅️ = All tiles slide left
+        - ➡️ = All tiles slide right
+        - ⬆️ = All tiles slide up
+        - ⬇️ = All tiles slide down
         - Matching tiles merge and double
         - 🏈+🏈=🎯, 🎯+🎯=🏆, etc.
         - New 🏈 appears after each move
