@@ -626,16 +626,25 @@ def play_2048_football():
         st.write("""
         **Goal:** Reach the 🏁 (2048) tile!
         
-        **Rules:**
+        **How it works:**
         - **ALL tiles slide together** in the arrow direction
-        - ⬅️ = All tiles slide left
-        - ➡️ = All tiles slide right
-        - ⬆️ = All tiles slide up
-        - ⬇️ = All tiles slide down
-        - Matching tiles merge and double
-        - 🏈+🏈=🎯, 🎯+🎯=🏆, etc.
-        - New 🏈 appears after each move
-        - Win by reaching 🏁 (2048)!
+        - When two matching tiles collide, they merge!
+        
+        **Example:**
+        ```
+        Before ⬅️:  [⬜][🏈][🏈][⬜]
+        After  ⬅️:  [🎯][⬜][⬜][⬜]
+        ```
+        The two 🏈 slid left and merged into 🎯!
+        
+        **Controls:**
+        - ⬅️ = Slide all tiles left
+        - ➡️ = Slide all tiles right
+        - ⬆️ = Slide all tiles up
+        - ⬇️ = Slide all tiles down
+        
+        **Progression:**
+        🏈(2) → 🎯(4) → 🏆(8) → 🥇(16) → 🔥(32) → ⚡(64) → 💥(128) → ⭐(256) → 🌟(512) → 💫(1024) → 🏁(2048)
         """)
     
     # Initialize game state
