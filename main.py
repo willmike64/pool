@@ -681,16 +681,23 @@ def move_left():
     moved = False
     for i in range(4):
         row = [x for x in st.session_state.game_2048[i] if x != 0]
-        for j in range(len(row)-1):
-            if row[j] == row[j+1]:
-                row[j] *= 2
-                st.session_state.score_2048 += row[j]
-                row.pop(j+1)
+        new_row = []
+        skip = False
+        for j in range(len(row)):
+            if skip:
+                skip = False
+                continue
+            if j + 1 < len(row) and row[j] == row[j+1]:
+                new_row.append(row[j] * 2)
+                st.session_state.score_2048 += row[j] * 2
+                skip = True
                 moved = True
-        row += [0] * (4 - len(row))
-        if row != st.session_state.game_2048[i]:
+            else:
+                new_row.append(row[j])
+        new_row += [0] * (4 - len(new_row))
+        if new_row != st.session_state.game_2048[i]:
             moved = True
-        st.session_state.game_2048[i] = row
+        st.session_state.game_2048[i] = new_row
     if moved:
         add_new_tile()
         st.rerun()
