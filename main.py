@@ -609,6 +609,14 @@ def show_user_stats():
     
     if st.session_state.get("show_2048", False):
         play_2048_football()
+    
+    # Mini Game - Memory Match
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🧠 Play Memory Match!"):
+        st.session_state.show_memory = not st.session_state.get("show_memory", False)
+    
+    if st.session_state.get("show_memory", False):
+        play_memory_match()
 
 def mark_player_paid(player_email, paid_status):
     squares_ref = db.collection("squares").where(filter=FieldFilter("claimed_by", "==", player_email))
@@ -751,6 +759,98 @@ def move_down():
     st.session_state.game_2048 = [list(x) for x in zip(*st.session_state.game_2048)]
     move_right()
     st.session_state.game_2048 = [list(x) for x in zip(*st.session_state.game_2048)]
+
+# --------------- Memory Match Game -----------------
+
+def play_memory_match():
+    st.sidebar.markdown("### 🧠 Memory Match")
+    
+    # Instructions
+    with st.sidebar.expander("📖 How to Play"):
+        st.write("""
+        **Goal:** Match all pairs of football emojis!
+        
+        **Rules:**
+        - Click cards to flip them over
+        - Find matching pairs
+        - Match all pairs to win!
+        - Try to do it in as few moves as possible
+        """)
+    
+    # Initialize game
+    if "memory_cards" not in st.session_state:
+        emojis = ["🏈", "🏆", "🥇", "🔥", "⚡", "⭐", "🎯", "🏁"]
+        cards = emojis * 2  # 2 of each
+        random.shuffle(cards)
+        st.session_state.memory_cards = cards
+        st.session_state.memory_flipped = [False] * 16
+        st.session_state.memory_matched = [False] * 16
+        st.session_state.memory_first = None
+        st.session_state.memory_moves = 0
+    
+    st.sidebar.write(f"Moves: {st.session_state.memory_moves}")
+    matched_count = sum(st.session_state.memory_matched)
+    st.sidebar.write(f"Matched: {matched_count // 2} / 8")
+    
+    # Display grid (4x4)
+    for row in range(4):
+        cols = st.sidebar.columns(4)
+        for col in range(4):
+            idx = row * 4 + col
+            
+            if st.session_state.memory_matched[idx]:
+                # Matched - show emoji
+                cols[col].markdown(f"<div style='text-align: center; font-size: 25px;'>{st.session_state.memory_cards[idx]}</div>", unsafe_allow_html=True)
+            elif st.session_state.memory_flipped[idx]:
+                # Flipped - show emoji
+                cols[col].markdown(f"<div style='text-align: center; font-size: 25px;'>{st.session_state.memory_cards[idx]}</div>", unsafe_allow_html=True)
+            else:
+                # Hidden - show button
+                if cols[col].button("🎴", key=f"mem_{idx}"):
+                    flip_card(idx)
+    
+    # Check win
+    if all(st.session_state.memory_matched):
+        st.sidebar.success(f"🎉 You won in {st.session_state.memory_moves} moves!")
+    
+    if st.sidebar.button("New Game", key="new_memory"):
+        del st.session_state.memory_cards
+        del st.session_state.memory_flipped
+        del st.session_state.memory_matched
+        del st.session_state.memory_first
+        del st.session_state.memory_moves
+        st.rerun()
+
+def flip_card(idx):
+    # Can't flip if already matched or already flipped
+    if st.session_state.memory_matched[idx] or st.session_state.memory_flipped[idx]:
+        return
+    
+    # Flip the card
+    st.session_state.memory_flipped[idx] = True
+    
+    if st.session_state.memory_first is None:
+        # First card flipped
+        st.session_state.memory_first = idx
+    else:
+        # Second card flipped
+        st.session_state.memory_moves += 1
+        first_idx = st.session_state.memory_first
+        
+        if st.session_state.memory_cards[first_idx] == st.session_state.memory_cards[idx]:
+            # Match!
+            st.session_state.memory_matched[first_idx] = True
+            st.session_state.memory_matched[idx] = True
+        else:
+            # No match - flip back after showing
+            import time
+            time.sleep(0.5)
+            st.session_state.memory_flipped[first_idx] = False
+            st.session_state.memory_flipped[idx] = False
+        
+        st.session_state.memory_first = None
+    
+    st.rerun()
 
 # --------------- Run -----------------
 if __name__ == "__main__":
