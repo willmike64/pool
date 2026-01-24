@@ -671,15 +671,22 @@ def play_2048_football():
             cols[idx].markdown(f"<div style='text-align: center; font-size: 30px;'>{emoji}</div>", unsafe_allow_html=True)
     
     # Controls
-    col1, col2, col3, col4 = st.sidebar.columns(4)
-    if col1.button("⬆️", key="up_2048"):
-        move_up()
-    if col2.button("⬇️", key="down_2048"):
-        move_down()
-    if col3.button("⬅️", key="left_2048"):
-        move_left()
-    if col4.button("➡️", key="right_2048"):
-        move_right()
+    st.sidebar.write("**Controls:**")
+    col1, col2, col3 = st.sidebar.columns([1, 1, 1])
+    with col2:
+        if st.button("⬆️", key="up_2048", use_container_width=True):
+            move_up()
+    
+    col4, col5, col6 = st.sidebar.columns([1, 1, 1])
+    with col4:
+        if st.button("⬅️", key="left_2048", use_container_width=True):
+            move_left()
+    with col5:
+        if st.button("⬇️", key="down_2048", use_container_width=True):
+            move_down()
+    with col6:
+        if st.button("➡️", key="right_2048", use_container_width=True):
+            move_right()
     
     if st.sidebar.button("New Game"):
         st.session_state.game_2048 = [[0]*4 for _ in range(4)]
