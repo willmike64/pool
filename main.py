@@ -625,6 +625,14 @@ def show_user_stats():
     
     if st.session_state.get("show_catch", False):
         play_catch_football()
+    
+    # Mini Game - Field Goal Kicker
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🏈 Field Goal Kicker!"):
+        st.session_state.show_kicker = not st.session_state.get("show_kicker", False)
+    
+    if st.session_state.get("show_kicker", False):
+        play_field_goal_kicker()
 
 def mark_player_paid(player_email, paid_status):
     squares_ref = db.collection("squares").where(filter=FieldFilter("claimed_by", "==", player_email))
@@ -968,6 +976,87 @@ def show_catch_leaderboard():
             st.sidebar.write(f"{medal} {name}: {time_ms}ms")
     except:
         st.sidebar.write("No scores yet!")
+
+# --------------- Field Goal Kicker Game -----------------
+
+def play_field_goal_kicker():
+    st.sidebar.markdown("### 🏈 Field Goal Kicker")
+    
+    # Instructions
+    with st.sidebar.expander("📖 How to Play"):
+        st.write("""
+        **Goal:** Kick field goals through the uprights!
+        
+        **Rules:**
+        - Set the angle (left/right)
+        - Set the power (distance)
+        - Click KICK to attempt
+        - Score points for successful kicks
+        - Try to get the highest score!
+        """)
+    
+    # Initialize game
+    if "kicker_score" not in st.session_state:
+        st.session_state.kicker_score = 0
+        st.session_state.kicker_attempts = 0
+        st.session_state.kicker_made = 0
+    
+    st.sidebar.write(f"🎯 Score: {st.session_state.kicker_score}")
+    st.sidebar.write(f"✅ Made: {st.session_state.kicker_made}/{st.session_state.kicker_attempts}")
+    
+    # Controls
+    angle = st.sidebar.slider("Angle ⬅️➡️", -45, 45, 0, key="kick_angle")
+    power = st.sidebar.slider("Power 💪", 0, 100, 50, key="kick_power")
+    
+    # Visual representation
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**Goal Posts:**")
+    
+    # Show goal posts
+    goal_visual = ""
+    if -15 <= angle <= 15:
+        goal_visual = "🟫 🎯 🟫"  # Between posts
+    elif angle < -15:
+        goal_visual = "🏈 🟫 🟫"  # Left
+    else:
+        goal_visual = "🟫 🟫 🏈"  # Right
+    
+    st.sidebar.markdown(f"<div style='text-align: center; font-size: 30px;'>{goal_visual}</div>", unsafe_allow_html=True)
+    
+    if st.sidebar.button("🦵 KICK!", key="kick_button", use_container_width=True):
+        # Calculate if it's good
+        # Need good angle (-15 to 15) and good power (40-80)
+        angle_good = -15 <= angle <= 15
+        power_good = 40 <= power <= 80
+        
+        st.session_state.kicker_attempts += 1
+        
+        if angle_good and power_good:
+            # Perfect kick!
+            points = 3
+            st.session_state.kicker_score += points
+            st.session_state.kicker_made += 1
+            st.sidebar.success("✅ GOOD! +3 points")
+        elif angle_good:
+            # Good angle but bad power
+            if power < 40:
+                st.sidebar.error("❌ Too weak! Didn't reach the posts")
+            else:
+                st.sidebar.error("❌ Too strong! Sailed over")
+        else:
+            # Bad angle
+            if angle < -15:
+                st.sidebar.error("❌ Wide left!")
+            else:
+                st.sidebar.error("❌ Wide right!")
+        
+        st.rerun()
+    
+    if st.sidebar.button("Reset Game", key="reset_kicker"):
+        st.session_state.kicker_score = 0
+        st.session_state.kicker_attempts = 0
+        st.session_state.kicker_made = 0
+        st.rerun()
 
 # --------------- Run -----------------
 if __name__ == "__main__":
