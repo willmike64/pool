@@ -617,6 +617,14 @@ def show_user_stats():
     
     if st.session_state.get("show_memory", False):
         play_memory_match()
+    
+    # Mini Game - Catch the Football
+    st.sidebar.markdown("---")
+    if st.sidebar.button("⚡ Catch the Football!"):
+        st.session_state.show_catch = not st.session_state.get("show_catch", False)
+    
+    if st.session_state.get("show_catch", False):
+        play_catch_football()
 
 def mark_player_paid(player_email, paid_status):
     squares_ref = db.collection("squares").where(filter=FieldFilter("claimed_by", "==", player_email))
@@ -851,6 +859,115 @@ def flip_card(idx):
         st.session_state.memory_first = None
     
     st.rerun()
+
+# --------------- Catch the Football Game -----------------
+
+def play_catch_football():
+    st.sidebar.markdown("### ⚡ Catch the Football")
+    
+    # Instructions
+    with st.sidebar.expander("📖 How to Play"):
+        st.write("""
+        **Goal:** Test your reaction time!
+        
+        **Rules:**
+        - Click START to begin
+        - Wait for the 🏈 to appear
+        - Click it as FAST as you can!
+        - Your time is recorded in milliseconds
+        - Compete for the best time!
+        """)
+    
+    # Initialize game
+    if "catch_state" not in st.session_state:
+        st.session_state.catch_state = "ready"  # ready, waiting, show, caught
+        st.session_state.catch_start_time = None
+        st.session_state.catch_show_time = None
+        st.session_state.catch_best_time = None
+    
+    if st.session_state.catch_state == "ready":
+        if st.sidebar.button("🚀 START", key="catch_start", use_container_width=True):
+            st.session_state.catch_state = "waiting"
+            st.session_state.catch_start_time = datetime.now()
+            # Random delay between 1-4 seconds
+            delay = random.uniform(1, 4)
+            st.session_state.catch_show_time = st.session_state.catch_start_time + timedelta(seconds=delay)
+            st.rerun()
+        
+        if st.session_state.catch_best_time:
+            st.sidebar.success(f"🏆 Best: {st.session_state.catch_best_time}ms")
+    
+    elif st.session_state.catch_state == "waiting":
+        now = datetime.now()
+        if now >= st.session_state.catch_show_time:
+            st.session_state.catch_state = "show"
+            st.session_state.catch_show_time = now
+            st.rerun()
+        else:
+            st.sidebar.warning("⏳ Wait for it...")
+            # Auto-refresh to check if it's time
+            import time
+            time.sleep(0.1)
+            st.rerun()
+    
+    elif st.session_state.catch_state == "show":
+        st.sidebar.markdown("<div style='text-align: center; font-size: 80px;'>🏈</div>", unsafe_allow_html=True)
+        if st.sidebar.button("🏈 CATCH IT!", key="catch_it", use_container_width=True):
+            catch_time = datetime.now()
+            reaction_ms = int((catch_time - st.session_state.catch_show_time).total_seconds() * 1000)
+            
+            # Update best time
+            if st.session_state.catch_best_time is None or reaction_ms < st.session_state.catch_best_time:
+                st.session_state.catch_best_time = reaction_ms
+            
+            # Save to leaderboard
+            email = st.session_state.get("email")
+            save_catch_score(email, reaction_ms)
+            
+            st.session_state.catch_state = "caught"
+            st.session_state.catch_last_time = reaction_ms
+            st.rerun()
+    
+    elif st.session_state.catch_state == "caught":
+        st.sidebar.success(f"⚡ {st.session_state.catch_last_time}ms")
+        if st.session_state.catch_best_time:
+            st.sidebar.info(f"🏆 Your Best: {st.session_state.catch_best_time}ms")
+        
+        if st.sidebar.button("🔄 Try Again", key="catch_again"):
+            st.session_state.catch_state = "ready"
+            st.rerun()
+    
+    # Show leaderboard
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🏆 Top 5 Fastest")
+    show_catch_leaderboard()
+
+def save_catch_score(email, reaction_ms):
+    try:
+        # Save to Firestore
+        score_ref = db.collection("catch_scores").document(email)
+        current = score_ref.get()
+        
+        if current.exists:
+            current_best = current.to_dict().get("best_time", 999999)
+            if reaction_ms < current_best:
+                score_ref.update({"best_time": reaction_ms, "timestamp": firestore.SERVER_TIMESTAMP})
+        else:
+            score_ref.set({"email": email, "best_time": reaction_ms, "timestamp": firestore.SERVER_TIMESTAMP})
+    except:
+        pass  # Fail silently if Firestore error
+
+def show_catch_leaderboard():
+    try:
+        scores = db.collection("catch_scores").order_by("best_time").limit(5).stream()
+        for idx, doc in enumerate(scores, 1):
+            data = doc.to_dict()
+            name = data.get("email", "Unknown").split("@")[0]
+            time_ms = data.get("best_time", 0)
+            medal = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"][idx-1]
+            st.sidebar.write(f"{medal} {name}: {time_ms}ms")
+    except:
+        st.sidebar.write("No scores yet!")
 
 # --------------- Run -----------------
 if __name__ == "__main__":
