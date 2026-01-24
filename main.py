@@ -621,6 +621,19 @@ def mark_player_paid(player_email, paid_status):
 def play_2048_football():
     st.sidebar.markdown("### 🏈 2048 Football")
     
+    # Instructions
+    with st.sidebar.expander("📖 How to Play"):
+        st.write("""
+        **Goal:** Reach the 🏁 (2048) tile!
+        
+        **Rules:**
+        - Use arrow buttons to slide tiles
+        - Matching tiles merge and double
+        - 🏈+🏈=🎯, 🎯+🎯=🏆, etc.
+        - New 🏈 appears after each move
+        - Win by reaching 🏁 (2048)!
+        """)
+    
     # Initialize game state
     if "game_2048" not in st.session_state:
         st.session_state.game_2048 = [[0]*4 for _ in range(4)]
