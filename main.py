@@ -605,6 +605,10 @@ def show_user_stats():
     # Mini Game - 2048 Football
     st.sidebar.markdown("---")
     if st.sidebar.button("🎮 Play 2048 Football!"):
+        # Close other games
+        st.session_state.show_memory = False
+        st.session_state.show_catch = False
+        st.session_state.show_kicker = False
         st.session_state.show_2048 = not st.session_state.get("show_2048", False)
     
     if st.session_state.get("show_2048", False):
@@ -613,6 +617,10 @@ def show_user_stats():
     # Mini Game - Memory Match
     st.sidebar.markdown("---")
     if st.sidebar.button("🧠 Play Memory Match!"):
+        # Close other games
+        st.session_state.show_2048 = False
+        st.session_state.show_catch = False
+        st.session_state.show_kicker = False
         st.session_state.show_memory = not st.session_state.get("show_memory", False)
     
     if st.session_state.get("show_memory", False):
@@ -621,6 +629,10 @@ def show_user_stats():
     # Mini Game - Catch the Football
     st.sidebar.markdown("---")
     if st.sidebar.button("⚡ Catch the Football!"):
+        # Close other games
+        st.session_state.show_2048 = False
+        st.session_state.show_memory = False
+        st.session_state.show_kicker = False
         st.session_state.show_catch = not st.session_state.get("show_catch", False)
     
     if st.session_state.get("show_catch", False):
@@ -629,6 +641,10 @@ def show_user_stats():
     # Mini Game - Field Goal Kicker
     st.sidebar.markdown("---")
     if st.sidebar.button("🏈 Field Goal Kicker!"):
+        # Close other games
+        st.session_state.show_2048 = False
+        st.session_state.show_memory = False
+        st.session_state.show_catch = False
         st.session_state.show_kicker = not st.session_state.get("show_kicker", False)
     
     if st.session_state.get("show_kicker", False):
