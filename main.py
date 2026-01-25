@@ -913,10 +913,7 @@ def play_catch_football():
             st.rerun()
         else:
             st.sidebar.warning("⏳ Wait for it...")
-            # Auto-refresh to check if it's time
-            import time
-            time.sleep(0.1)
-            st.rerun()
+            st.sidebar.info("Refresh the page when ready")
     
     elif st.session_state.catch_state == "show":
         st.sidebar.markdown("<div style='text-align: center; font-size: 80px;'>🏈</div>", unsafe_allow_html=True)
