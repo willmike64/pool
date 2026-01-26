@@ -522,27 +522,7 @@ def play_field_goal_kicker_main():
         
         st.markdown(f"<div style='text-align: center; font-size: 40px;'>{goal_visual}</div>", unsafe_allow_html=True)
         
-        # Show kick animation if just kicked
-        if "show_kick_animation" in st.session_state and st.session_state.show_kick_animation:
-            st.markdown("""
-                <style>
-                @keyframes kick {
-                    0% { transform: translateY(0) scale(1); opacity: 1; }
-                    50% { transform: translateY(-150px) scale(0.5); opacity: 0.8; }
-                    100% { transform: translateY(-300px) scale(0.3); opacity: 0; }
-                }
-                .football-kick {
-                    font-size: 60px;
-                    animation: kick 1.5s ease-out;
-                    text-align: center;
-                }
-                </style>
-                <div class='football-kick'>🏈</div>
-            """, unsafe_allow_html=True)
-            st.session_state.show_kick_animation = False
-        
         if st.button("🦵 KICK!", key="kick_button", use_container_width=True):
-            st.session_state.show_kick_animation = True
             wind = st.session_state.kicker_wind
             distance = st.session_state.kicker_distance
             effective_angle = angle + wind
@@ -563,32 +543,6 @@ def play_field_goal_kicker_main():
                     points = 3
                 st.session_state.kicker_score += points
                 st.session_state.kicker_made += 1
-                st.balloons()
-                st.markdown("""
-                    <style>
-                    @keyframes flyover {
-                        0% { transform: translateX(-100%); opacity: 0; }
-                        20% { opacity: 1; }
-                        80% { opacity: 1; }
-                        100% { transform: translateX(100%); opacity: 0; }
-                    }
-                    .its-good {
-                        position: fixed;
-                        top: 20%;
-                        left: 0;
-                        width: 100%;
-                        text-align: center;
-                        font-size: 80px;
-                        font-weight: bold;
-                        color: #00ff00;
-                        text-shadow: 3px 3px 6px rgba(0,0,0,0.8);
-                        animation: flyover 3s ease-in-out;
-                        z-index: 9999;
-                        pointer-events: none;
-                    }
-                    </style>
-                    <div class='its-good'>IT'S GOOD! 🏈</div>
-                """, unsafe_allow_html=True)
                 st.success(f"✅ GOOD from {distance} yards! +{points} points")
             elif angle_good:
                 if power < min_power:
@@ -1102,7 +1056,431 @@ def mark_player_paid(player_email, paid_status):
 #     
 #     st.rerun()
 
+# --------------- Catch the Football Game -----------------
+
+def play_catch_football():
+    st.sidebar.markdown("### ⚡ Catch the Football")
+    
+    # Instructions
+    with st.sidebar.expander("📖 How to Play"):
+        st.write("""
+        **Goal:** Test your reaction time!
+        
+        **Rules:**
+        - Click START to begin
+        - Wait for the 🏈 to appear
+        - Click it as FAST as you can!
+        - Your time is recorded in milliseconds
+        - Compete for the best time!
+        """)
+    
+    # Initialize game
+    if "catch_state" not in st.session_state:
+        st.session_state.catch_state = "ready"  # ready, waiting, show, caught
+        st.session_state.catch_start_time = None
+        st.session_state.catch_show_time = None
+        st.session_state.catch_best_time = None
+    
+    if st.session_state.catch_state == "ready":
+        if st.sidebar.button("🚀 START", key="catch_start", use_container_width=True):
+            st.session_state.catch_state = "waiting"
+            st.session_state.catch_start_time = datetime.now()
+            # Random delay between 1-4 seconds
+            delay = random.uniform(1, 4)
+            st.session_state.catch_show_time = st.session_state.catch_start_time + timedelta(seconds=delay)
+        
+        if st.session_state.catch_best_time:
+            st.sidebar.success(f"🏆 Best: {st.session_state.catch_best_time}ms")
+    
+    elif st.session_state.catch_state == "waiting":
+        now = datetime.now()
+        if now >= st.session_state.catch_show_time:
+            st.session_state.catch_state = "show"
+            st.session_state.catch_show_time = now
+        else:
+            st.sidebar.warning("⏳ Wait for it...")
+            st.sidebar.info("Refresh the page when ready")
+    
+    elif st.session_state.catch_state == "show":
+        st.sidebar.markdown("<div style='text-align: center; font-size: 80px;'>🏈</div>", unsafe_allow_html=True)
+        if st.sidebar.button("🏈 CATCH IT!", key="catch_it", use_container_width=True):
+            catch_time = datetime.now()
+            reaction_ms = int((catch_time - st.session_state.catch_show_time).total_seconds() * 1000)
+            
+            # Update best time
+            if st.session_state.catch_best_time is None or reaction_ms < st.session_state.catch_best_time:
+                st.session_state.catch_best_time = reaction_ms
+            
+            # Save to leaderboard
+            email = st.session_state.get("email")
+            save_catch_score(email, reaction_ms)
+            
+            st.session_state.catch_state = "caught"
+            st.session_state.catch_last_time = reaction_ms
+    
+    elif st.session_state.catch_state == "caught":
+        st.sidebar.success(f"⚡ {st.session_state.catch_last_time}ms")
+        if st.session_state.catch_best_time:
+            st.sidebar.info(f"🏆 Your Best: {st.session_state.catch_best_time}ms")
+        
+        if st.sidebar.button("🔄 Try Again", key="catch_again"):
+            st.session_state.catch_state = "ready"
+    
+    # Show leaderboard
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🏆 Top 5 Fastest")
+    show_catch_leaderboard()
+
+def save_catch_score(email, reaction_ms):
+    try:
+        # Save to Firestore
+        score_ref = db.collection("catch_scores").document(email)
+        current = score_ref.get()
+        
+        if current.exists:
+            current_best = current.to_dict().get("best_time", 999999)
+            if reaction_ms < current_best:
+                score_ref.update({"best_time": reaction_ms, "timestamp": firestore.SERVER_TIMESTAMP})
+        else:
+            score_ref.set({"email": email, "best_time": reaction_ms, "timestamp": firestore.SERVER_TIMESTAMP})
+    except:
+        pass  # Fail silently if Firestore error
+
+def show_catch_leaderboard():
+    try:
+        scores = db.collection("catch_scores").order_by("best_time").limit(5).stream()
+        for idx, doc in enumerate(scores, 1):
+            data = doc.to_dict()
+            name = data.get("email", "Unknown").split("@")[0]
+            time_ms = data.get("best_time", 0)
+            medal = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"][idx-1]
+            st.sidebar.write(f"{medal} {name}: {time_ms}ms")
+    except:
+        st.sidebar.write("No scores yet!")
+
+# --------------- Field Goal Kicker Game -----------------
+
+def play_field_goal_kicker():
+    st.sidebar.markdown("### 🏈 Field Goal Kicker")
+    
+    # Instructions
+    with st.sidebar.expander("📖 How to Play"):
+        st.write("""
+        **Goal:** Kick field goals through the uprights!
+        
+        **Rules:**
+        - Each kick has random distance (25-55 yards)
+        - Wind affects your kick left/right
+        - Adjust angle to compensate for wind
+        - Longer kicks need more power
+        - Score more points for longer kicks:
+          - 25-39 yards = 3 points
+          - 40-49 yards = 4 points
+          - 50+ yards = 5 points
+        """)
+    
+    # Initialize game
+    if "kicker_score" not in st.session_state:
+        st.session_state.kicker_score = 0
+        st.session_state.kicker_attempts = 0
+        st.session_state.kicker_made = 0
+        st.session_state.kicker_wind = random.randint(-20, 20)
+        st.session_state.kicker_distance = random.choice([25, 30, 35, 40, 45, 50, 55])
+    
+    st.sidebar.write(f"🎯 Score: {st.session_state.kicker_score}")
+    st.sidebar.write(f"✅ Made: {st.session_state.kicker_made}/{st.session_state.kicker_attempts}")
+    
+    # Show conditions
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**Kick Conditions:**")
+    st.sidebar.write(f"📏 Distance: {st.session_state.kicker_distance} yards")
+    
+    wind_dir = "⬅️ Left" if st.session_state.kicker_wind < 0 else "➡️ Right"
+    wind_strength = abs(st.session_state.kicker_wind)
+    st.sidebar.write(f"💨 Wind: {wind_strength} mph {wind_dir}")
+    
+    # Controls
+    angle = st.sidebar.slider("Angle ⬅️➡️", -45, 45, 0, key="kick_angle")
+    power = st.sidebar.slider("Power 💪", 0, 100, 50, key="kick_power")
+    
+    # Visual representation
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**Goal Posts:**")
+    
+    # Show goal posts
+    goal_visual = ""
+    if -15 <= angle <= 15:
+        goal_visual = "🟫 🎯 🟫"  # Between posts
+    elif angle < -15:
+        goal_visual = "🏈 🟫 🟫"  # Left
+    else:
+        goal_visual = "🟫 🟫 🏈"  # Right
+    
+    st.sidebar.markdown(f"<div style='text-align: center; font-size: 30px;'>{goal_visual}</div>", unsafe_allow_html=True)
+    
+    if st.sidebar.button("🦵 KICK!", key="kick_button", use_container_width=True):
+        # Calculate if it's good - account for wind and distance
+        wind = st.session_state.kicker_wind
+        distance = st.session_state.kicker_distance
+        
+        # Wind affects angle (negative wind = left, positive = right)
+        effective_angle = angle + wind
+        
+        # Distance affects required power
+        min_power = 30 + (distance - 25) * 0.8  # Harder kicks need more power
+        max_power = 70 + (distance - 25) * 0.6
+        
+        angle_good = -15 <= effective_angle <= 15
+        power_good = min_power <= power <= max_power
+        
+        st.session_state.kicker_attempts += 1
+        
+        if angle_good and power_good:
+            # Perfect kick! More points for longer distances
+            if distance >= 50:
+                points = 5
+            elif distance >= 40:
+                points = 4
+            else:
+                points = 3
+            st.session_state.kicker_score += points
+            st.session_state.kicker_made += 1
+            st.sidebar.success(f"✅ GOOD from {distance} yards! +{points} points")
+        elif angle_good:
+            # Good angle but bad power
+            if power < min_power:
+                st.sidebar.error(f"❌ Too weak! Needed {int(min_power)}+ power for {distance} yards")
+            else:
+                st.sidebar.error("❌ Too strong! Sailed over")
+        else:
+            # Bad angle - wind affected it
+            if effective_angle < -15:
+                st.sidebar.error(f"❌ Wide left! Wind pushed it {abs(wind)} mph")
+            else:
+                st.sidebar.error(f"❌ Wide right! Wind pushed it {abs(wind)} mph")
+        
+        # New conditions for next kick
+        st.session_state.kicker_wind = random.randint(-20, 20)
+        st.session_state.kicker_distance = random.choice([25, 30, 35, 40, 45, 50, 55])
+    
+    if st.sidebar.button("Reset Game", key="reset_kicker"):
+        st.session_state.kicker_score = 0
+        st.session_state.kicker_attempts = 0
+        st.session_state.kicker_made = 0
+        st.session_state.kicker_wind = random.randint(-20, 20)
+        st.session_state.kicker_distance = random.choice([25, 30, 35, 40, 45, 50, 55])
 
 # --------------- Run -----------------
 if __name__ == "__main__":
     main()
+
+
+# --------------- Games Page -----------------
+
+def show_games_page():
+    st.title("🎮 Football Games")
+    
+    game = st.radio("Select a game:", ["Catch the Football", "Field Goal Kicker"], horizontal=True)
+    st.markdown("---")
+    
+    if game == "Catch the Football":
+        play_catch_football_main()
+    else:
+        play_field_goal_kicker_main()
+
+def play_catch_football_main():
+    st.markdown("### ⚡ Catch the Football")
+    
+    with st.expander("📖 How to Play"):
+        st.write("""
+        **Goal:** Test your reaction time!
+        
+        **Rules:**
+        - Click START to begin
+        - Wait for the 🏈 to appear
+        - Click it as FAST as you can!
+        - Your time is recorded in milliseconds
+        - Compete for the best time!
+        """)
+    
+    if "catch_state" not in st.session_state:
+        st.session_state.catch_state = "ready"
+        st.session_state.catch_start_time = None
+        st.session_state.catch_show_time = None
+        st.session_state.catch_best_time = None
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        if st.session_state.catch_state == "ready":
+            if st.button("🚀 START", key="catch_start", use_container_width=True):
+                st.session_state.catch_state = "waiting"
+                st.session_state.catch_start_time = datetime.now()
+                delay = random.uniform(1, 4)
+                st.session_state.catch_show_time = st.session_state.catch_start_time + timedelta(seconds=delay)
+                st.rerun()
+            
+            if st.session_state.catch_best_time:
+                st.success(f"🏆 Your Best: {st.session_state.catch_best_time}ms")
+        
+        elif st.session_state.catch_state == "waiting":
+            now = datetime.now()
+            if now >= st.session_state.catch_show_time:
+                st.session_state.catch_state = "show"
+                st.session_state.catch_show_time = now
+                st.rerun()
+            else:
+                st.warning("⏳ Wait for it...")
+        
+        elif st.session_state.catch_state == "show":
+            st.markdown("<div style='text-align: center; font-size: 120px;'>🏈</div>", unsafe_allow_html=True)
+            if st.button("🏈 CATCH IT!", key="catch_it", use_container_width=True):
+                catch_time = datetime.now()
+                reaction_ms = int((catch_time - st.session_state.catch_show_time).total_seconds() * 1000)
+                
+                if st.session_state.catch_best_time is None or reaction_ms < st.session_state.catch_best_time:
+                    st.session_state.catch_best_time = reaction_ms
+                
+                email = st.session_state.get("email")
+                save_catch_score(email, reaction_ms)
+                
+                st.session_state.catch_state = "caught"
+                st.session_state.catch_last_time = reaction_ms
+                st.rerun()
+        
+        elif st.session_state.catch_state == "caught":
+            st.success(f"⚡ {st.session_state.catch_last_time}ms")
+            if st.session_state.catch_best_time:
+                st.info(f"🏆 Your Best: {st.session_state.catch_best_time}ms")
+            
+            if st.button("🔄 Try Again", key="catch_again"):
+                st.session_state.catch_state = "ready"
+                st.rerun()
+    
+    with col2:
+        st.markdown("### 🏆 Top 5 Fastest")
+        show_catch_leaderboard()
+
+def save_catch_score(email, reaction_ms):
+    try:
+        score_ref = db.collection("catch_scores").document(email)
+        current = score_ref.get()
+        
+        if current.exists:
+            current_best = current.to_dict().get("best_time", 999999)
+            if reaction_ms < current_best:
+                score_ref.update({"best_time": reaction_ms, "timestamp": firestore.SERVER_TIMESTAMP})
+        else:
+            score_ref.set({"email": email, "best_time": reaction_ms, "timestamp": firestore.SERVER_TIMESTAMP})
+    except:
+        pass
+
+def show_catch_leaderboard():
+    try:
+        scores = db.collection("catch_scores").order_by("best_time").limit(5).stream()
+        for idx, doc in enumerate(scores, 1):
+            data = doc.to_dict()
+            name = data.get("email", "Unknown").split("@")[0]
+            time_ms = data.get("best_time", 0)
+            medal = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"][idx-1]
+            st.write(f"{medal} {name}: {time_ms}ms")
+    except:
+        st.write("No scores yet!")
+
+def play_field_goal_kicker_main():
+    st.markdown("### 🏈 Field Goal Kicker")
+    
+    with st.expander("📖 How to Play"):
+        st.write("""
+        **Goal:** Kick field goals through the uprights!
+        
+        **Rules:**
+        - Each kick has random distance (25-55 yards)
+        - Wind affects your kick left/right
+        - Adjust angle to compensate for wind
+        - Longer kicks need more power
+        - Score more points for longer kicks:
+          - 25-39 yards = 3 points
+          - 40-49 yards = 4 points
+          - 50+ yards = 5 points
+        """)
+    
+    if "kicker_score" not in st.session_state:
+        st.session_state.kicker_score = 0
+        st.session_state.kicker_attempts = 0
+        st.session_state.kicker_made = 0
+        st.session_state.kicker_wind = random.randint(-20, 20)
+        st.session_state.kicker_distance = random.choice([25, 30, 35, 40, 45, 50, 55])
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.write(f"🎯 Score: {st.session_state.kicker_score}")
+        st.write(f"✅ Made: {st.session_state.kicker_made}/{st.session_state.kicker_attempts}")
+        
+        st.markdown("---")
+        st.markdown("**Kick Conditions:**")
+        st.write(f"📏 Distance: {st.session_state.kicker_distance} yards")
+        
+        wind_dir = "⬅️ Left" if st.session_state.kicker_wind < 0 else "➡️ Right"
+        wind_strength = abs(st.session_state.kicker_wind)
+        st.write(f"💨 Wind: {wind_strength} mph {wind_dir}")
+        
+        angle = st.slider("Angle ⬅️➡️", -45, 45, 0, key="kick_angle")
+        power = st.slider("Power 💪", 0, 100, 50, key="kick_power")
+        
+        goal_visual = ""
+        if -15 <= angle <= 15:
+            goal_visual = "🟫 🎯 🟫"
+        elif angle < -15:
+            goal_visual = "🏈 🟫 🟫"
+        else:
+            goal_visual = "🟫 🟫 🏈"
+        
+        st.markdown(f"<div style='text-align: center; font-size: 40px;'>{goal_visual}</div>", unsafe_allow_html=True)
+        
+        if st.button("🦵 KICK!", key="kick_button", use_container_width=True):
+            wind = st.session_state.kicker_wind
+            distance = st.session_state.kicker_distance
+            effective_angle = angle + wind
+            min_power = 30 + (distance - 25) * 0.8
+            max_power = 70 + (distance - 25) * 0.6
+            
+            angle_good = -15 <= effective_angle <= 15
+            power_good = min_power <= power <= max_power
+            
+            st.session_state.kicker_attempts += 1
+            
+            if angle_good and power_good:
+                if distance >= 50:
+                    points = 5
+                elif distance >= 40:
+                    points = 4
+                else:
+                    points = 3
+                st.session_state.kicker_score += points
+                st.session_state.kicker_made += 1
+                st.success(f"✅ GOOD from {distance} yards! +{points} points")
+            elif angle_good:
+                if power < min_power:
+                    st.error(f"❌ Too weak! Needed {int(min_power)}+ power for {distance} yards")
+                else:
+                    st.error("❌ Too strong! Sailed over")
+            else:
+                if effective_angle < -15:
+                    st.error(f"❌ Wide left! Wind pushed it {abs(wind)} mph")
+                else:
+                    st.error(f"❌ Wide right! Wind pushed it {abs(wind)} mph")
+            
+            st.session_state.kicker_wind = random.randint(-20, 20)
+            st.session_state.kicker_distance = random.choice([25, 30, 35, 40, 45, 50, 55])
+            st.rerun()
+    
+    with col2:
+        if st.button("Reset Game", key="reset_kicker"):
+            st.session_state.kicker_score = 0
+            st.session_state.kicker_attempts = 0
+            st.session_state.kicker_made = 0
+            st.session_state.kicker_wind = random.randint(-20, 20)
+            st.session_state.kicker_distance = random.choice([25, 30, 35, 40, 45, 50, 55])
+            st.rerun()

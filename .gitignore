@@ -32,3 +32,5 @@ Thumbs.db
 .streamlit/config.toml
 change_avatar.py
 fix_avatars.py
+main.py.backup
+main.py.bak
