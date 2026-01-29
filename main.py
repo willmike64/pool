@@ -259,12 +259,26 @@ def draw_grid():
     # Display Payouts
     st.markdown("---")
     st.markdown("### 💰 Prize Payouts")
+    
+    # Calculate total pot from paid squares
+    all_squares = get_all_squares()
+    paid_count = sum(1 for data in all_squares.values() if data.get("paid", False))
+    total_pot = paid_count * 10
+    
+    # Calculate payouts based on percentages
+    q1_payout = int(total_pot * 0.10)
+    q2_payout = int(total_pot * 0.15)
+    q3_payout = int(total_pot * 0.25)
+    final_payout = int(total_pot * 0.50)
+    
+    st.info(f"🎫 {paid_count} paid squares = ${total_pot} total pot")
+    
     payout_cols = st.columns(4)
-    payouts = [("Q1", "$100"), ("Q2", "$150"), ("Q3", "$250"), ("Final", "$500")]
-    for idx, (quarter, amount) in enumerate(payouts):
+    payouts = [("Q1", q1_payout, "10%"), ("Q2", q2_payout, "15%"), ("Q3", q3_payout, "25%"), ("Final", final_payout, "50%")]
+    for idx, (quarter, amount, pct) in enumerate(payouts):
         with payout_cols[idx]:
-            st.markdown(f"**{quarter}**")
-            st.markdown(f"<h2 style='text-align: center; color: #00ff00;'>{amount}</h2>", unsafe_allow_html=True)
+            st.markdown(f"**{quarter}** ({pct})")
+            st.markdown(f"<h2 style='text-align: center; color: #00ff00;'>${amount}</h2>", unsafe_allow_html=True)
     
     # Display Winners
     winners = config.get("winners", {})
@@ -363,13 +377,15 @@ def set_quarter_winner(quarter, nfc_score, afc_score, top_numbers, side_numbers)
 def show_games_page():
     st.title("🎮 Football Games")
     
-    game = st.radio("Select a game:", ["Catch the Football", "Field Goal Kicker"], horizontal=True)
+    game = st.radio("Select a game:", ["Catch the Football", "Field Goal Kicker", "Line Battle"], horizontal=True)
     st.markdown("---")
     
     if game == "Catch the Football":
         play_catch_football_main()
-    else:
+    elif game == "Field Goal Kicker":
         play_field_goal_kicker_main()
+    else:
+        play_line_battle_main()
 
 def play_catch_football_main():
     st.markdown("### ⚡ Catch the Football")
@@ -470,6 +486,339 @@ def show_catch_leaderboard():
     except:
         st.write("No scores yet!")
 
+def save_kicker_score(email, score, made, attempts):
+    try:
+        score_ref = db.collection("kicker_scores").document(email)
+        current = score_ref.get()
+        
+        if current.exists:
+            current_best = current.to_dict().get("high_score", 0)
+            if score > current_best:
+                score_ref.update({"high_score": score, "made": made, "attempts": attempts, "timestamp": firestore.SERVER_TIMESTAMP})
+        else:
+            score_ref.set({"email": email, "high_score": score, "made": made, "attempts": attempts, "timestamp": firestore.SERVER_TIMESTAMP})
+    except:
+        pass
+
+def show_kicker_leaderboard():
+    try:
+        scores = db.collection("kicker_scores").order_by("high_score", direction=firestore.Query.DESCENDING).limit(5).stream()
+        for idx, doc in enumerate(scores, 1):
+            data = doc.to_dict()
+            name = data.get("email", "Unknown").split("@")[0]
+            high_score = data.get("high_score", 0)
+            made = data.get("made", 0)
+            attempts = data.get("attempts", 0)
+            medal = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"][idx-1]
+            st.write(f"{medal} {name}: {high_score} pts")
+            st.caption(f"{made}/{attempts} made")
+    except:
+        st.write("No scores yet!")
+
+# --------------- Line Battle Game -----------------
+
+def play_line_battle_main():
+    st.markdown("### 🏈 Line Battle")
+    
+    with st.expander("📖 How to Play"):
+        st.write("""
+        **Goal:** Score touchdowns by winning line battles!
+        
+        **Rules:**
+        - Click SNAP to start the play
+        - All 11 players on each side roll dice
+        - Team with highest total wins!
+        - Win = Move forward 10 yards
+        - Lose = Move back 10 yards
+        - Reach 30+ yards = TOUCHDOWN (7 points)
+        - First to 21 points wins!
+        """)
+    
+    # Initialize game
+    if "battle_score_user" not in st.session_state:
+        st.session_state.battle_score_user = 0
+        st.session_state.battle_score_cpu = 0
+        st.session_state.battle_yards = 0
+        st.session_state.battle_rolls_user = None
+        st.session_state.battle_rolls_cpu = None
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        # Score display
+        st.markdown(f"### 🟢 You: {st.session_state.battle_score_user} | 🔴 CPU: {st.session_state.battle_score_cpu}")
+        
+        # Field position
+        yards = st.session_state.battle_yards
+        if yards >= 30:
+            st.success("🎉 TOUCHDOWN! You scored 7 points!")
+            st.session_state.battle_score_user += 7
+            st.session_state.battle_yards = 0
+            st.session_state.battle_rolls_user = None
+            st.session_state.battle_rolls_cpu = None
+            st.balloons()
+        elif yards <= -30:
+            st.error("😱 CPU TOUCHDOWN! They scored 7 points!")
+            st.session_state.battle_score_cpu += 7
+            st.session_state.battle_yards = 0
+            st.session_state.battle_rolls_user = None
+            st.session_state.battle_rolls_cpu = None
+        
+        # Field visualization
+        field_pos = 50 + yards
+        st.markdown(f"**Field Position: {field_pos} yard line**")
+        
+        # Animated field
+        field_html = f"""
+        <style>
+        .field {{
+            background: linear-gradient(90deg, #2d5016 0%, #3d6b1f 50%, #2d5016 100%);
+            height: 100px;
+            position: relative;
+            border: 3px solid white;
+            margin: 20px 0;
+        }}
+        .ball {{
+            position: absolute;
+            left: {field_pos}%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 40px;
+            animation: bounce 1s infinite;
+        }}
+        @keyframes bounce {{
+            0%, 100% {{ transform: translate(-50%, -50%); }}
+            50% {{ transform: translate(-50%, -60%); }}
+        }}
+        .endzone-left {{
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 10%;
+            height: 100%;
+            background: rgba(255, 0, 0, 0.3);
+        }}
+        .endzone-right {{
+            position: absolute;
+            right: 0;
+            top: 0;
+            width: 10%;
+            height: 100%;
+            background: rgba(0, 255, 0, 0.3);
+        }}
+        </style>
+        <div class='field'>
+            <div class='endzone-left'></div>
+            <div class='endzone-right'></div>
+            <div class='ball'>🏈</div>
+        </div>
+        """
+        st.markdown(field_html, unsafe_allow_html=True)
+        
+        # Check win condition
+        if st.session_state.battle_score_user >= 21:
+            st.success("🏆 YOU WIN THE GAME!")
+            if st.button("Play Again", key="battle_reset_win"):
+                st.session_state.battle_score_user = 0
+                st.session_state.battle_score_cpu = 0
+                st.session_state.battle_yards = 0
+                st.session_state.battle_rolls_user = None
+                st.session_state.battle_rolls_cpu = None
+                st.rerun()
+            return
+        elif st.session_state.battle_score_cpu >= 21:
+            st.error("😔 CPU WINS THE GAME!")
+            if st.button("Play Again", key="battle_reset_lose"):
+                st.session_state.battle_score_user = 0
+                st.session_state.battle_score_cpu = 0
+                st.session_state.battle_yards = 0
+                st.session_state.battle_rolls_user = None
+                st.session_state.battle_rolls_cpu = None
+                st.rerun()
+            return
+        
+        # Line of scrimmage
+        st.markdown("---")
+        st.markdown("### 🔥 Line of Scrimmage")
+        
+        # Show rolls if they exist
+        if st.session_state.battle_rolls_user:
+            st.markdown("**🟢 Your Team:**")
+            cols = st.columns(11)
+            for i, roll in enumerate(st.session_state.battle_rolls_user):
+                with cols[i]:
+                    # Highlight 1v6 matchups
+                    is_domination = (roll == 6 and st.session_state.battle_rolls_cpu[i] == 1)
+                    is_dominated = (roll == 1 and st.session_state.battle_rolls_cpu[i] == 6)
+                    
+                    color = "gold" if is_domination else "red" if is_dominated else "white"
+                    
+                    st.markdown(f"""
+                        <style>
+                        @keyframes spin{i} {{
+                            0% {{ transform: rotateY(0deg); }}
+                            100% {{ transform: rotateY(360deg); }}
+                        }}
+                        .dice{i} {{
+                            font-size: 30px;
+                            animation: spin{i} 0.5s ease-out;
+                            display: inline-block;
+                            color: {color};
+                        }}
+                        </style>
+                        <div class='dice{i}'>🎲</div>
+                    """, unsafe_allow_html=True)
+                    if is_domination:
+                        st.write(f"**{roll}** ⭐")
+                    elif is_dominated:
+                        st.write(f"**{roll}** 💥")
+                    else:
+                        st.write(f"**{roll}**")
+            
+            user_total = sum(st.session_state.battle_rolls_user)
+            st.success(f"Total: {user_total}")
+            
+            st.markdown("---")
+            st.markdown("**🔴 CPU Team:**")
+            cols = st.columns(11)
+            for i, roll in enumerate(st.session_state.battle_rolls_cpu):
+                with cols[i]:
+                    # Highlight 1v6 matchups
+                    is_domination = (roll == 6 and st.session_state.battle_rolls_user[i] == 1)
+                    is_dominated = (roll == 1 and st.session_state.battle_rolls_user[i] == 6)
+                    
+                    color = "gold" if is_domination else "red" if is_dominated else "white"
+                    
+                    st.markdown(f"""
+                        <style>
+                        @keyframes spin_cpu{i} {{
+                            0% {{ transform: rotateY(0deg); }}
+                            100% {{ transform: rotateY(360deg); }}
+                        }}
+                        .dice_cpu{i} {{
+                            font-size: 30px;
+                            animation: spin_cpu{i} 0.5s ease-out;
+                            display: inline-block;
+                            color: {color};
+                        }}
+                        </style>
+                        <div class='dice_cpu{i}'>🎲</div>
+                    """, unsafe_allow_html=True)
+                    if is_domination:
+                        st.write(f"**{roll}** ⭐")
+                    elif is_dominated:
+                        st.write(f"**{roll}** 💥")
+                    else:
+                        st.write(f"**{roll}**")
+            
+            cpu_total = sum(st.session_state.battle_rolls_cpu)
+            st.error(f"Total: {cpu_total}")
+            
+            # Show result
+            st.markdown("---")
+            
+            # Calculate bonus yards display
+            bonus_count = 0
+            for i in range(11):
+                if st.session_state.battle_rolls_user[i] == 6 and st.session_state.battle_rolls_cpu[i] == 1:
+                    bonus_count += 1
+                elif st.session_state.battle_rolls_user[i] == 1 and st.session_state.battle_rolls_cpu[i] == 6:
+                    bonus_count -= 1
+            
+            yards_diff = abs(user_total - cpu_total)
+            bonus_yards = abs(bonus_count) * 5
+            
+            if user_total > cpu_total:
+                total_yards = yards_diff + (bonus_count * 5 if bonus_count > 0 else 0)
+                st.markdown(f"""
+                    <style>
+                    @keyframes victory {{
+                        0% {{ transform: scale(1); opacity: 0; }}
+                        50% {{ transform: scale(1.5); opacity: 1; }}
+                        100% {{ transform: scale(1); opacity: 1; }}
+                    }}
+                    .victory {{
+                        text-align: center;
+                        font-size: 60px;
+                        color: #00ff00;
+                        animation: victory 1s ease-out;
+                    }}
+                    </style>
+                    <div class='victory'>✅ YOU WIN! +{total_yards} YARDS</div>
+                """, unsafe_allow_html=True)
+                if bonus_count > 0:
+                    st.success(f"⭐ {bonus_count} Domination Bonus! (+{bonus_count * 5} yards)")
+            elif user_total < cpu_total:
+                total_yards = yards_diff + (abs(bonus_count) * 5 if bonus_count < 0 else 0)
+                st.markdown(f"""
+                    <style>
+                    @keyframes defeat {{
+                        0% {{ transform: scale(1); opacity: 0; }}
+                        50% {{ transform: scale(1.5); opacity: 1; }}
+                        100% {{ transform: scale(1); opacity: 1; }}
+                    }}
+                    .defeat {{
+                        text-align: center;
+                        font-size: 60px;
+                        color: #ff0000;
+                        animation: defeat 1s ease-out;
+                    }}
+                    </style>
+                    <div class='defeat'>❌ CPU WINS! -{total_yards} YARDS</div>
+                """, unsafe_allow_html=True)
+                if bonus_count < 0:
+                    st.error(f"💥 {abs(bonus_count)} Dominated! (-{abs(bonus_count) * 5} yards)")
+            else:
+                st.info("🤝 TIE! No change")
+        
+        # SNAP button
+        st.markdown("---")
+        if st.button("🏈 SNAP THE BALL!", key="snap_button", use_container_width=True):
+            # Roll all dice
+            user_rolls = [random.randint(1, 6) for _ in range(11)]
+            cpu_rolls = [random.randint(1, 6) for _ in range(11)]
+            
+            st.session_state.battle_rolls_user = user_rolls
+            st.session_state.battle_rolls_cpu = cpu_rolls
+            
+            user_total = sum(user_rolls)
+            cpu_total = sum(cpu_rolls)
+            
+            # Calculate yardage based on difference
+            yards_diff = abs(user_total - cpu_total)
+            
+            # Check for 1 vs 6 matchups (bonus 5 yards each)
+            bonus_yards = 0
+            for i in range(11):
+                if user_rolls[i] == 6 and cpu_rolls[i] == 1:
+                    bonus_yards += 5
+                elif user_rolls[i] == 1 and cpu_rolls[i] == 6:
+                    bonus_yards -= 5
+            
+            # Apply yardage
+            if user_total > cpu_total:
+                st.session_state.battle_yards += yards_diff + bonus_yards
+            elif user_total < cpu_total:
+                st.session_state.battle_yards -= (yards_diff + abs(bonus_yards))
+            
+            st.rerun()
+    
+    with col2:
+        st.markdown("### 📊 Game Stats")
+        st.write(f"Current Drive: {st.session_state.battle_yards} yards")
+        if st.session_state.battle_yards > 0:
+            st.write(f"To TD: {30 - st.session_state.battle_yards} yards")
+        else:
+            st.write(f"Defending: {abs(st.session_state.battle_yards)} yards back")
+        
+        if st.button("Reset Game", key="battle_reset"):
+            st.session_state.battle_score_user = 0
+            st.session_state.battle_score_cpu = 0
+            st.session_state.battle_yards = 0
+            st.session_state.battle_rolls_user = None
+            st.session_state.battle_rolls_cpu = None
+            st.rerun()
+
 def play_field_goal_kicker_main():
     st.markdown("### 🏈 Field Goal Kicker")
     
@@ -494,12 +843,32 @@ def play_field_goal_kicker_main():
         st.session_state.kicker_made = 0
         st.session_state.kicker_wind = random.randint(-20, 20)
         st.session_state.kicker_distance = random.choice([25, 30, 35, 40, 45, 50, 55])
+        st.session_state.kicker_elevation = random.randint(-5, 5)
+        st.session_state.kicker_grass = random.choice(["Dry", "Wet", "Muddy"])
+        st.session_state.kicker_pressure = random.randint(1, 10)
+    
+    # Check if game over
+    if st.session_state.kicker_attempts >= 3:
+        st.warning("⏱️ Game Over! 3 attempts used.")
+        st.info(f"Final Score: {st.session_state.kicker_score} points")
+        if st.button("Play Again", key="play_again_kicker", use_container_width=True):
+            st.session_state.kicker_score = 0
+            st.session_state.kicker_attempts = 0
+            st.session_state.kicker_made = 0
+            st.session_state.kicker_wind = random.randint(-20, 20)
+            st.session_state.kicker_distance = random.choice([25, 30, 35, 40, 45, 50, 55])
+            st.session_state.kicker_elevation = random.randint(-5, 5)
+            st.session_state.kicker_grass = random.choice(["Dry", "Wet", "Muddy"])
+            st.session_state.kicker_pressure = random.randint(1, 10)
+            st.rerun()
+        return
     
     col1, col2 = st.columns([2, 1])
     
     with col1:
         st.write(f"🎯 Score: {st.session_state.kicker_score}")
         st.write(f"✅ Made: {st.session_state.kicker_made}/{st.session_state.kicker_attempts}")
+        st.write(f"🎯 Attempts Left: {3 - st.session_state.kicker_attempts}")
         
         st.markdown("---")
         st.markdown("**Kick Conditions:**")
@@ -508,6 +877,14 @@ def play_field_goal_kicker_main():
         wind_dir = "⬅️ Left" if st.session_state.kicker_wind < 0 else "➡️ Right"
         wind_strength = abs(st.session_state.kicker_wind)
         st.write(f"💨 Wind: {wind_strength} mph {wind_dir}")
+        
+        elev_dir = "Uphill" if st.session_state.kicker_elevation > 0 else "Downhill" if st.session_state.kicker_elevation < 0 else "Flat"
+        st.write(f"⛰️ Elevation: {elev_dir} ({st.session_state.kicker_elevation})")
+        
+        grass_emoji = {"Dry": "🌾", "Wet": "💧", "Muddy": "🪨"}[st.session_state.kicker_grass]
+        st.write(f"{grass_emoji} Field: {st.session_state.kicker_grass}")
+        
+        st.write(f"👀 Pressure: {st.session_state.kicker_pressure}/10")
         
         angle = st.slider("Angle ⬅️➡️", -45, 45, 0, key="kick_angle")
         power = st.slider("Power 💪", 0, 100, 50, key="kick_power")
@@ -545,14 +922,30 @@ def play_field_goal_kicker_main():
             st.session_state.show_kick_animation = True
             wind = st.session_state.kicker_wind
             distance = st.session_state.kicker_distance
-            effective_angle = angle + wind
-            min_power = 30 + (distance - 25) * 0.8
-            max_power = 70 + (distance - 25) * 0.6
+            elevation = st.session_state.kicker_elevation
+            grass = st.session_state.kicker_grass
+            pressure = st.session_state.kicker_pressure
             
-            angle_good = -15 <= effective_angle <= 15
+            # Calculate effective angle with all factors
+            effective_angle = angle + wind + (elevation * 2)
+            
+            # Grass affects power needed
+            grass_modifier = {"Dry": 0, "Wet": 5, "Muddy": 10}[grass]
+            
+            # Pressure affects accuracy (random jitter)
+            pressure_jitter = random.randint(-pressure, pressure)
+            effective_angle += pressure_jitter
+            
+            # Distance affects required power
+            min_power = 30 + (distance - 25) * 0.8 + grass_modifier
+            max_power = 70 + (distance - 25) * 0.6 + grass_modifier
+            
+            # Tighter accuracy window
+            angle_good = -10 <= effective_angle <= 10
             power_good = min_power <= power <= max_power
             
             st.session_state.kicker_attempts += 1
+            st.session_state.kicker_score += 1  # 1 point for trying
             
             if angle_good and power_good:
                 if distance >= 50:
@@ -563,28 +956,30 @@ def play_field_goal_kicker_main():
                     points = 3
                 st.session_state.kicker_score += points
                 st.session_state.kicker_made += 1
+                
+                # Save high score
+                email = st.session_state.get("email")
+                save_kicker_score(email, st.session_state.kicker_score, st.session_state.kicker_made, st.session_state.kicker_attempts)
+                
                 st.balloons()
                 st.markdown("""
                     <style>
-                    @keyframes flyover {
-                        0% { transform: translateX(-100%); opacity: 0; }
-                        20% { opacity: 1; }
-                        80% { opacity: 1; }
-                        100% { transform: translateX(100%); opacity: 0; }
+                    @keyframes flyacross {
+                        0% { left: -50%; }
+                        100% { left: 150%; }
                     }
                     .its-good {
                         position: fixed;
-                        top: 20%;
-                        left: 0;
-                        width: 100%;
-                        text-align: center;
+                        top: 30%;
+                        left: -50%;
                         font-size: 80px;
                         font-weight: bold;
                         color: #00ff00;
                         text-shadow: 3px 3px 6px rgba(0,0,0,0.8);
-                        animation: flyover 3s ease-in-out;
+                        animation: flyacross 2s ease-in-out forwards;
                         z-index: 9999;
                         pointer-events: none;
+                        white-space: nowrap;
                     }
                     </style>
                     <div class='its-good'>IT'S GOOD! 🏈</div>
@@ -592,27 +987,27 @@ def play_field_goal_kicker_main():
                 st.success(f"✅ GOOD from {distance} yards! +{points} points")
             elif angle_good:
                 if power < min_power:
-                    st.error(f"❌ Too weak! Needed {int(min_power)}+ power for {distance} yards")
+                    st.error(f"❌ Too weak! Needed {int(min_power)}+ power")
                 else:
                     st.error("❌ Too strong! Sailed over")
             else:
-                if effective_angle < -15:
-                    st.error(f"❌ Wide left! Wind pushed it {abs(wind)} mph")
+                if effective_angle < -10:
+                    st.error(f"❌ Wide left!")
                 else:
-                    st.error(f"❌ Wide right! Wind pushed it {abs(wind)} mph")
+                    st.error(f"❌ Wide right!")
             
+            # New conditions for next kick
             st.session_state.kicker_wind = random.randint(-20, 20)
             st.session_state.kicker_distance = random.choice([25, 30, 35, 40, 45, 50, 55])
+            st.session_state.kicker_elevation = random.randint(-5, 5)
+            st.session_state.kicker_grass = random.choice(["Dry", "Wet", "Muddy"])
+            st.session_state.kicker_pressure = random.randint(1, 10)
             st.rerun()
     
     with col2:
-        if st.button("Reset Game", key="reset_kicker"):
-            st.session_state.kicker_score = 0
-            st.session_state.kicker_attempts = 0
-            st.session_state.kicker_made = 0
-            st.session_state.kicker_wind = random.randint(-20, 20)
-            st.session_state.kicker_distance = random.choice([25, 30, 35, 40, 45, 50, 55])
-            st.rerun()
+        st.markdown("### 🏆 Top 5 Kickers")
+        show_kicker_leaderboard()
+        st.markdown("---")
 
 # --------------- Main App -----------------
 
