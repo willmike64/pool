@@ -616,8 +616,30 @@ def play_line_battle_main():
             st.session_state.battle_rolls_cpu = None
         
         # Animated field visualization
-        field_pos = 50 + yards
-        st.markdown(f"**Field Position: {field_pos} yard line**")
+        yards = st.session_state.battle_yards
+        
+        # Convert yards to proper field position (0-50 scale)
+        if yards > 0:
+            # Moving towards opponent's endzone
+            if yards <= 50:
+                field_position = 50 - yards
+                field_desc = f"Own {field_position}"
+            else:
+                field_position = yards - 50
+                field_desc = f"Opp {field_position}"
+        else:
+            # Negative yards (opponent has ball or pushed back)
+            if yards >= -50:
+                field_position = 50 + yards
+                field_desc = f"Own {field_position}"
+            else:
+                field_position = abs(yards) - 50
+                field_desc = f"Opp {field_position}"
+        
+        st.markdown(f"**Field Position: {field_desc} yard line**")
+        
+        # Calculate ball position for animation (0-100%)
+        field_pos = max(0, min(100, 50 + yards))
         
         field_html = f"""
         <style>
@@ -809,9 +831,9 @@ def play_line_battle_main():
                         st.rerun()
                 with col_fg2:
                     if st.button("🥾 PUNT", key="punt_attempt", use_container_width=True):
-                        # Punt 30-50 yards
+                        # Punt 30-50 yards (push ball back towards own endzone)
                         punt_distance = random.randint(30, 50)
-                        st.session_state.battle_yards -= punt_distance
+                        st.session_state.battle_yards += punt_distance
                         st.session_state.battle_possession = "cpu"
                         st.session_state.battle_down = 1
                         st.session_state.battle_yards_to_go = 10
@@ -826,8 +848,9 @@ def play_line_battle_main():
                 col_p1, col_p2 = st.columns(2)
                 with col_p1:
                     if st.button("🥾 PUNT", key="punt_attempt2", use_container_width=True):
+                        # Punt 30-50 yards (push ball back towards own endzone)
                         punt_distance = random.randint(30, 50)
-                        st.session_state.battle_yards -= punt_distance
+                        st.session_state.battle_yards += punt_distance
                         st.session_state.battle_possession = "cpu"
                         st.session_state.battle_down = 1
                         st.session_state.battle_yards_to_go = 10
