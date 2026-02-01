@@ -528,8 +528,8 @@ def play_line_battle_main():
         - Click SNAP to start the play
         - All 11 players on each side roll dice
         - Team with highest total wins!
-        - Win = Move forward 10 yards
-        - Lose = Move back 10 yards
+        - Yards gained/lost = difference in totals
+        - **BONUS:** 6 vs 1 matchup = +5 extra yards! ⭐
         - Reach 30+ yards = TOUCHDOWN (7 points)
         - First to 21 points wins!
         """)
@@ -541,6 +541,12 @@ def play_line_battle_main():
         st.session_state.battle_yards = 0
         st.session_state.battle_rolls_user = None
         st.session_state.battle_rolls_cpu = None
+        st.session_state.battle_down = 1
+        st.session_state.battle_yards_to_go = 10
+        st.session_state.battle_possession = "user"
+        st.session_state.battle_drive_start = 0
+        st.session_state.battle_fg_mode = False
+        st.session_state.battle_fg_distance = 0
     
     col1, col2 = st.columns([2, 1])
     
@@ -548,19 +554,35 @@ def play_line_battle_main():
         # Score display
         st.markdown(f"### 🟢 You: {st.session_state.battle_score_user} | 🔴 CPU: {st.session_state.battle_score_cpu}")
         
+        # Possession and down info
+        possession_emoji = "🟢" if st.session_state.battle_possession == "user" else "🔴"
+        possession_text = "YOUR BALL" if st.session_state.battle_possession == "user" else "CPU BALL"
+        st.markdown(f"### {possession_emoji} {possession_text}")
+        st.write(f"🏈 Down: {st.session_state.battle_down} | To Go: {st.session_state.battle_yards_to_go} yards")
+        
         # Field position
         yards = st.session_state.battle_yards
-        if yards >= 30:
+        
+        # Check for touchdown
+        if st.session_state.battle_possession == "user" and yards >= 30:
             st.success("🎉 TOUCHDOWN! You scored 7 points!")
             st.session_state.battle_score_user += 7
             st.session_state.battle_yards = 0
+            st.session_state.battle_down = 1
+            st.session_state.battle_yards_to_go = 10
+            st.session_state.battle_possession = "cpu"
+            st.session_state.battle_drive_start = 0
             st.session_state.battle_rolls_user = None
             st.session_state.battle_rolls_cpu = None
             st.balloons()
-        elif yards <= -30:
+        elif st.session_state.battle_possession == "cpu" and yards <= -30:
             st.error("😱 CPU TOUCHDOWN! They scored 7 points!")
             st.session_state.battle_score_cpu += 7
             st.session_state.battle_yards = 0
+            st.session_state.battle_down = 1
+            st.session_state.battle_yards_to_go = 10
+            st.session_state.battle_possession = "user"
+            st.session_state.battle_drive_start = 0
             st.session_state.battle_rolls_user = None
             st.session_state.battle_rolls_cpu = None
         
@@ -624,6 +646,10 @@ def play_line_battle_main():
                 st.session_state.battle_yards = 0
                 st.session_state.battle_rolls_user = None
                 st.session_state.battle_rolls_cpu = None
+                st.session_state.battle_down = 1
+                st.session_state.battle_yards_to_go = 10
+                st.session_state.battle_possession = "user"
+                st.session_state.battle_drive_start = 0
                 st.rerun()
             return
         elif st.session_state.battle_score_cpu >= 21:
@@ -634,6 +660,10 @@ def play_line_battle_main():
                 st.session_state.battle_yards = 0
                 st.session_state.battle_rolls_user = None
                 st.session_state.battle_rolls_cpu = None
+                st.session_state.battle_down = 1
+                st.session_state.battle_yards_to_go = 10
+                st.session_state.battle_possession = "user"
+                st.session_state.battle_drive_start = 0
                 st.rerun()
             return
         
@@ -773,6 +803,153 @@ def play_line_battle_main():
         
         # SNAP button
         st.markdown("---")
+        
+        # Check for field goal option on 4th down
+        if st.session_state.battle_down == 4:
+            fg_distance = 30 - st.session_state.battle_yards + 17  # Add 17 for endzone + holder
+            if st.session_state.battle_possession == "user" and 20 <= fg_distance <= 55:
+                st.warning(f"🎯 4th Down - Field Goal Range! ({fg_distance} yards)")
+                col_fg1, col_fg2, col_fg3 = st.columns(3)
+                with col_fg1:
+                    if st.button("🦵 ATTEMPT FIELD GOAL", key="fg_attempt", use_container_width=True):
+                        st.session_state.battle_fg_mode = True
+                        st.session_state.battle_fg_distance = fg_distance
+                        st.rerun()
+                with col_fg2:
+                    if st.button("🥾 PUNT", key="punt_attempt", use_container_width=True):
+                        # Punt 30-50 yards
+                        punt_distance = random.randint(30, 50)
+                        st.session_state.battle_yards -= punt_distance
+                        st.session_state.battle_possession = "cpu"
+                        st.session_state.battle_down = 1
+                        st.session_state.battle_yards_to_go = 10
+                        st.success(f"🥾 Punted {punt_distance} yards!")
+                        st.rerun()
+                with col_fg3:
+                    if st.button("🏈 GO FOR IT!", key="go_for_it", use_container_width=True):
+                        pass  # Continue to normal snap
+            elif st.session_state.battle_possession == "user":
+                # Out of FG range, offer punt or go for it
+                st.warning("🎯 4th Down - Out of FG Range")
+                col_p1, col_p2 = st.columns(2)
+                with col_p1:
+                    if st.button("🥾 PUNT", key="punt_attempt2", use_container_width=True):
+                        punt_distance = random.randint(30, 50)
+                        st.session_state.battle_yards -= punt_distance
+                        st.session_state.battle_possession = "cpu"
+                        st.session_state.battle_down = 1
+                        st.session_state.battle_yards_to_go = 10
+                        st.success(f"🥾 Punted {punt_distance} yards!")
+                        st.rerun()
+                with col_p2:
+                    if st.button("🏈 GO FOR IT!", key="go_for_it2", use_container_width=True):
+                        pass  # Continue to normal snap
+            elif st.session_state.battle_possession == "cpu" and 20 <= fg_distance <= 55:
+                # CPU decides: 70% FG, 30% punt
+                cpu_decision = random.random()
+                if cpu_decision < 0.7:
+                    st.info(f"🔴 CPU is attempting a {fg_distance} yard field goal!")
+                    st.write("**Try to block it!** Roll higher to block:")
+                    if st.button("🚫 ATTEMPT BLOCK!", key="block_attempt", use_container_width=True):
+                        user_block = random.randint(1, 20)
+                        cpu_kick = random.randint(1, 20)
+                        
+                        st.write(f"🟢 Your block roll: {user_block}")
+                        st.write(f"🔴 CPU kick roll: {cpu_kick}")
+                        
+                        if user_block > cpu_kick:
+                            st.success("✅ BLOCKED! Turnover on downs!")
+                            st.session_state.battle_possession = "user"
+                            st.session_state.battle_down = 1
+                            st.session_state.battle_yards_to_go = 10
+                        else:
+                            # Calculate FG success based on distance
+                            fg_chance = max(50, 100 - (fg_distance - 20))
+                            if random.randint(1, 100) <= fg_chance:
+                                st.error("❌ GOOD! CPU scores 3 points!")
+                                st.session_state.battle_score_cpu += 3
+                                st.session_state.battle_possession = "user"
+                                st.session_state.battle_yards = 0
+                            else:
+                                st.success("✅ MISS! Turnover on downs!")
+                                st.session_state.battle_possession = "user"
+                            st.session_state.battle_down = 1
+                            st.session_state.battle_yards_to_go = 10
+                        st.rerun()
+                    return
+                else:
+                    st.info("🔴 CPU is punting!")
+                    punt_distance = random.randint(30, 50)
+                    st.session_state.battle_yards += punt_distance
+                    st.session_state.battle_possession = "user"
+                    st.session_state.battle_down = 1
+                    st.session_state.battle_yards_to_go = 10
+                    st.write(f"🥾 CPU punted {punt_distance} yards")
+                    if st.button("Continue", key="punt_continue"):
+                        st.rerun()
+                    return
+            elif st.session_state.battle_possession == "cpu":
+                # CPU out of FG range, always punts
+                st.info("🔴 CPU is punting!")
+                punt_distance = random.randint(30, 50)
+                st.session_state.battle_yards += punt_distance
+                st.session_state.battle_possession = "user"
+                st.session_state.battle_down = 1
+                st.session_state.battle_yards_to_go = 10
+                st.write(f"🥾 CPU punted {punt_distance} yards")
+                if st.button("Continue", key="punt_continue2"):
+                    st.rerun()
+                return
+        
+        # Field goal mode
+        if st.session_state.battle_fg_mode:
+            st.markdown("### 🦵 Field Goal Attempt")
+            distance = st.session_state.battle_fg_distance
+            wind = random.randint(-15, 15)
+            
+            st.write(f"📏 Distance: {distance} yards")
+            wind_dir = "⬅️ Left" if wind < 0 else "➡️ Right" if wind > 0 else "None"
+            st.write(f"💨 Wind: {abs(wind)} mph {wind_dir}")
+            
+            angle = st.slider("Angle ⬅️➡️", -30, 30, 0, key="fg_angle")
+            power = st.slider("Power 💪", 0, 100, 50, key="fg_power")
+            
+            if st.button("🦵 KICK!", key="fg_kick", use_container_width=True):
+                # Wind affects angle
+                effective_angle = angle + wind
+                
+                # Simple FG calculation
+                min_power = 40 + (distance - 20) * 0.5
+                max_power = 70 + (distance - 20) * 0.3
+                
+                angle_good = -10 <= effective_angle <= 10
+                power_good = min_power <= power <= max_power
+                
+                if angle_good and power_good:
+                    st.balloons()
+                    st.success("✅ GOOD! You score 3 points!")
+                    st.session_state.battle_score_user += 3
+                elif not angle_good:
+                    if effective_angle < -10:
+                        st.error(f"❌ Wide left! Wind pushed it {abs(wind)} mph")
+                    else:
+                        st.error(f"❌ Wide right! Wind pushed it {abs(wind)} mph")
+                else:
+                    st.error("❌ Wrong power! Too weak or too strong")
+                
+                # Reset
+                st.session_state.battle_possession = "cpu"
+                st.session_state.battle_yards = 0
+                st.session_state.battle_down = 1
+                st.session_state.battle_yards_to_go = 10
+                st.session_state.battle_fg_mode = False
+                st.rerun()
+            
+            if st.button("Cancel", key="fg_cancel"):
+                st.session_state.battle_fg_mode = False
+                st.rerun()
+            return
+        
         if st.button("🏈 SNAP THE BALL!", key="snap_button", use_container_width=True):
             # Roll all dice
             user_rolls = [random.randint(1, 6) for _ in range(11)]
@@ -795,16 +972,64 @@ def play_line_battle_main():
                 elif user_rolls[i] == 1 and cpu_rolls[i] == 6:
                     bonus_yards -= 5
             
-            # Apply yardage
-            if user_total > cpu_total:
-                st.session_state.battle_yards += yards_diff + bonus_yards
-            elif user_total < cpu_total:
-                st.session_state.battle_yards -= (yards_diff + abs(bonus_yards))
+            # Determine yards gained based on possession
+            if st.session_state.battle_possession == "user":
+                if user_total > cpu_total:
+                    yards_gained = yards_diff + (bonus_yards if bonus_yards > 0 else 0)
+                    st.session_state.battle_yards += yards_gained
+                    st.session_state.battle_yards_to_go -= yards_gained
+                elif user_total < cpu_total:
+                    yards_lost = yards_diff + (abs(bonus_yards) if bonus_yards < 0 else 0)
+                    st.session_state.battle_yards -= yards_lost
+                    st.session_state.battle_yards_to_go += yards_lost
+                
+                # Check for first down
+                if st.session_state.battle_yards_to_go <= 0:
+                    st.session_state.battle_down = 1
+                    st.session_state.battle_yards_to_go = 10
+                    st.session_state.battle_drive_start = st.session_state.battle_yards
+                else:
+                    st.session_state.battle_down += 1
+                
+                # Check for turnover on downs
+                if st.session_state.battle_down > 4:
+                    st.session_state.battle_possession = "cpu"
+                    st.session_state.battle_down = 1
+                    st.session_state.battle_yards_to_go = 10
+                    st.session_state.battle_drive_start = st.session_state.battle_yards
+            else:
+                # CPU possession
+                if cpu_total > user_total:
+                    yards_gained = yards_diff + (abs(bonus_yards) if bonus_yards < 0 else 0)
+                    st.session_state.battle_yards -= yards_gained
+                    st.session_state.battle_yards_to_go -= yards_gained
+                elif cpu_total < user_total:
+                    yards_lost = yards_diff + (bonus_yards if bonus_yards > 0 else 0)
+                    st.session_state.battle_yards += yards_lost
+                    st.session_state.battle_yards_to_go += yards_lost
+                
+                # Check for first down
+                if st.session_state.battle_yards_to_go <= 0:
+                    st.session_state.battle_down = 1
+                    st.session_state.battle_yards_to_go = 10
+                    st.session_state.battle_drive_start = st.session_state.battle_yards
+                else:
+                    st.session_state.battle_down += 1
+                
+                # Check for turnover on downs
+                if st.session_state.battle_down > 4:
+                    st.session_state.battle_possession = "user"
+                    st.session_state.battle_down = 1
+                    st.session_state.battle_yards_to_go = 10
+                    st.session_state.battle_drive_start = st.session_state.battle_yards
             
             st.rerun()
     
     with col2:
         st.markdown("### 📊 Game Stats")
+        st.write(f"Possession: {'🟢 You' if st.session_state.battle_possession == 'user' else '🔴 CPU'}")
+        st.write(f"Down: {st.session_state.battle_down}")
+        st.write(f"To Go: {st.session_state.battle_yards_to_go} yards")
         st.write(f"Current Drive: {st.session_state.battle_yards} yards")
         if st.session_state.battle_yards > 0:
             st.write(f"To TD: {30 - st.session_state.battle_yards} yards")
@@ -817,6 +1042,10 @@ def play_line_battle_main():
             st.session_state.battle_yards = 0
             st.session_state.battle_rolls_user = None
             st.session_state.battle_rolls_cpu = None
+            st.session_state.battle_down = 1
+            st.session_state.battle_yards_to_go = 10
+            st.session_state.battle_possession = "user"
+            st.session_state.battle_drive_start = 0
             st.rerun()
 
 def play_field_goal_kicker_main():

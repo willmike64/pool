@@ -34,3 +34,9 @@ change_avatar.py
 fix_avatars.py
 main.py.backup
 main.py.bak
+SyllabusFiles
+find_teaching_notes.py
+update_avatars.py
+update_teaching_notes.py
+TeachingNotes
+search_syllabus.py
