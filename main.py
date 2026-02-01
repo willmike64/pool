@@ -517,22 +517,40 @@ def show_kicker_leaderboard():
 
 # --------------- Line Battle Game -----------------
 
+# NFL Team helmets - Super Bowl matchup!
+NFL_TEAMS = {
+    "Seahawks": "https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500/sea.png&h=100&w=100",
+    "Patriots": "https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500/ne.png&h=100&w=100"
+}
+
 def play_line_battle_main():
     st.markdown("### 🏈 Line Battle")
     
+    # Team selection at start
+    if "battle_user_team" not in st.session_state:
+        st.markdown("### Pick Your Team!")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.image(NFL_TEAMS['Seahawks'], width=150)
+            if st.button("🦅 Seattle Seahawks", key="team_seahawks", use_container_width=True):
+                st.session_state.battle_user_team = "Seahawks"
+                st.session_state.battle_cpu_team = "Patriots"
+                st.rerun()
+        with col2:
+            st.image(NFL_TEAMS['Patriots'], width=150)
+            if st.button("🔴 New England Patriots", key="team_patriots", use_container_width=True):
+                st.session_state.battle_user_team = "Patriots"
+                st.session_state.battle_cpu_team = "Seahawks"
+                st.rerun()
+        return
+    
+    user_team = st.session_state.battle_user_team
+    cpu_team = st.session_state.battle_cpu_team
+    user_helmet = NFL_TEAMS[user_team]
+    cpu_helmet = NFL_TEAMS[cpu_team]
+    
     with st.expander("📖 How to Play"):
-        st.write("""
-        **Goal:** Score touchdowns by winning line battles!
-        
-        **Rules:**
-        - Click SNAP to start the play
-        - All 11 players on each side roll dice
-        - Team with highest total wins!
-        - Yards gained/lost = difference in totals
-        - **BONUS:** 6 vs 1 matchup = +5 extra yards! ⭐
-        - Reach 30+ yards = TOUCHDOWN (7 points)
-        - First to 21 points wins!
-        """)
+        st.write("**Goal:** Score touchdowns by winning line battles! Click SNAP to start. Team with highest dice total wins. 6 vs 1 = +5 bonus yards. Reach 30+ yards = TD (7 pts). First to 21 wins!")
     
     # Initialize game
     if "battle_score_user" not in st.session_state:
@@ -548,19 +566,30 @@ def play_line_battle_main():
         st.session_state.battle_fg_mode = False
         st.session_state.battle_fg_distance = 0
     
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([3, 1])
     
     with col1:
-        # Score display
-        st.markdown(f"### 🟢 You: {st.session_state.battle_score_user} | 🔴 CPU: {st.session_state.battle_score_cpu}")
+        # Show team helmets with possession indicator
+        helmet_html = f"""
+        <div style='display: flex; justify-content: space-around; align-items: center; margin: 20px 0; padding: 15px; background: linear-gradient(90deg, #1e1e1e 0%, #2d2d2d 50%, #1e1e1e 100%); border-radius: 10px;'>
+            <div style='text-align: center; {'opacity: 1; transform: scale(1.1);' if st.session_state.battle_possession == 'user' else 'opacity: 0.4;'} transition: all 0.3s;'>
+                <img src='{user_helmet}' width='80' style='filter: {'drop-shadow(0 0 15px #00ff00)' if st.session_state.battle_possession == 'user' else 'none'};'/>
+                <div style='color: #00ff00; font-weight: bold; margin-top: 10px;'>{user_team}</div>
+                <div style='font-size: 24px; color: #00ff00;'>{st.session_state.battle_score_user}</div>
+            </div>
+            <div style='font-size: 40px; color: #ffd700;'>🏆 VS 🏆</div>
+            <div style='text-align: center; {'opacity: 1; transform: scale(1.1);' if st.session_state.battle_possession == 'cpu' else 'opacity: 0.4;'} transition: all 0.3s;'>
+                <img src='{cpu_helmet}' width='80' style='filter: {'drop-shadow(0 0 15px #ff0000)' if st.session_state.battle_possession == 'cpu' else 'none'};'/>
+                <div style='color: #ff0000; font-weight: bold; margin-top: 10px;'>{cpu_team}</div>
+                <div style='font-size: 24px; color: #ff0000;'>{st.session_state.battle_score_cpu}</div>
+            </div>
+        </div>
+        """
+        st.markdown(helmet_html, unsafe_allow_html=True)
         
-        # Possession and down info
-        possession_emoji = "🟢" if st.session_state.battle_possession == "user" else "🔴"
-        possession_text = "YOUR BALL" if st.session_state.battle_possession == "user" else "CPU BALL"
-        st.markdown(f"### {possession_emoji} {possession_text}")
-        st.write(f"🏈 Down: {st.session_state.battle_down} | To Go: {st.session_state.battle_yards_to_go} yards")
+        # Compact status
+        st.markdown(f"**{'🟢 YOUR BALL' if st.session_state.battle_possession == 'user' else '🔴 CPU BALL'}** | Down {st.session_state.battle_down}, {st.session_state.battle_yards_to_go} to go | Field: {50 + st.session_state.battle_yards} yd")
         
-        # Field position
         yards = st.session_state.battle_yards
         
         # Check for touchdown
@@ -586,11 +615,10 @@ def play_line_battle_main():
             st.session_state.battle_rolls_user = None
             st.session_state.battle_rolls_cpu = None
         
-        # Field visualization
+        # Animated field visualization
         field_pos = 50 + yards
         st.markdown(f"**Field Position: {field_pos} yard line**")
         
-        # Animated field
         field_html = f"""
         <style>
         .field {{
@@ -639,8 +667,10 @@ def play_line_battle_main():
         
         # Check win condition
         if st.session_state.battle_score_user >= 21:
-            st.success("🏆 YOU WIN THE GAME!")
+            st.success(f"🏆 {user_team.upper()} WIN THE GAME!")
             if st.button("Play Again", key="battle_reset_win"):
+                del st.session_state.battle_user_team
+                del st.session_state.battle_cpu_team
                 st.session_state.battle_score_user = 0
                 st.session_state.battle_score_cpu = 0
                 st.session_state.battle_yards = 0
@@ -653,8 +683,10 @@ def play_line_battle_main():
                 st.rerun()
             return
         elif st.session_state.battle_score_cpu >= 21:
-            st.error("😔 CPU WINS THE GAME!")
+            st.error(f"😔 {cpu_team.upper()} WIN THE GAME!")
             if st.button("Play Again", key="battle_reset_lose"):
+                del st.session_state.battle_user_team
+                del st.session_state.battle_cpu_team
                 st.session_state.battle_score_user = 0
                 st.session_state.battle_score_cpu = 0
                 st.session_state.battle_yards = 0
@@ -667,141 +699,101 @@ def play_line_battle_main():
                 st.rerun()
             return
         
-        # Line of scrimmage
-        st.markdown("---")
-        st.markdown("### 🔥 Line of Scrimmage")
-        
-        # Show rolls if they exist
+        # Line of scrimmage - HEAD TO HEAD DICE ANIMATION
         if st.session_state.battle_rolls_user:
-            st.markdown("**🟢 Your Team:**")
-            cols = st.columns(11)
-            for i, roll in enumerate(st.session_state.battle_rolls_user):
-                with cols[i]:
-                    # Highlight 1v6 matchups
-                    is_domination = (roll == 6 and st.session_state.battle_rolls_cpu[i] == 1)
-                    is_dominated = (roll == 1 and st.session_state.battle_rolls_cpu[i] == 6)
-                    
-                    color = "gold" if is_domination else "red" if is_dominated else "white"
-                    
-                    st.markdown(f"""
-                        <style>
-                        @keyframes spin{i} {{
-                            0% {{ transform: rotateY(0deg); }}
-                            100% {{ transform: rotateY(360deg); }}
-                        }}
-                        .dice{i} {{
-                            font-size: 30px;
-                            animation: spin{i} 0.5s ease-out;
-                            display: inline-block;
-                            color: {color};
-                        }}
-                        </style>
-                        <div class='dice{i}'>🎲</div>
-                    """, unsafe_allow_html=True)
-                    if is_domination:
-                        st.write(f"**{roll}** ⭐")
-                    elif is_dominated:
-                        st.write(f"**{roll}** 💥")
-                    else:
-                        st.write(f"**{roll}**")
-            
             user_total = sum(st.session_state.battle_rolls_user)
-            st.success(f"Total: {user_total}")
-            
-            st.markdown("---")
-            st.markdown("**🔴 CPU Team:**")
-            cols = st.columns(11)
-            for i, roll in enumerate(st.session_state.battle_rolls_cpu):
-                with cols[i]:
-                    # Highlight 1v6 matchups
-                    is_domination = (roll == 6 and st.session_state.battle_rolls_user[i] == 1)
-                    is_dominated = (roll == 1 and st.session_state.battle_rolls_user[i] == 6)
-                    
-                    color = "gold" if is_domination else "red" if is_dominated else "white"
-                    
-                    st.markdown(f"""
-                        <style>
-                        @keyframes spin_cpu{i} {{
-                            0% {{ transform: rotateY(0deg); }}
-                            100% {{ transform: rotateY(360deg); }}
-                        }}
-                        .dice_cpu{i} {{
-                            font-size: 30px;
-                            animation: spin_cpu{i} 0.5s ease-out;
-                            display: inline-block;
-                            color: {color};
-                        }}
-                        </style>
-                        <div class='dice_cpu{i}'>🎲</div>
-                    """, unsafe_allow_html=True)
-                    if is_domination:
-                        st.write(f"**{roll}** ⭐")
-                    elif is_dominated:
-                        st.write(f"**{roll}** 💥")
-                    else:
-                        st.write(f"**{roll}**")
-            
             cpu_total = sum(st.session_state.battle_rolls_cpu)
-            st.error(f"Total: {cpu_total}")
             
-            # Show result
-            st.markdown("---")
-            
-            # Calculate bonus yards display
-            bonus_count = 0
-            for i in range(11):
-                if st.session_state.battle_rolls_user[i] == 6 and st.session_state.battle_rolls_cpu[i] == 1:
-                    bonus_count += 1
-                elif st.session_state.battle_rolls_user[i] == 1 and st.session_state.battle_rolls_cpu[i] == 6:
-                    bonus_count -= 1
-            
+            # Show totals and result in one line
+            bonus_count = sum(1 for i in range(11) if st.session_state.battle_rolls_user[i] == 6 and st.session_state.battle_rolls_cpu[i] == 1) - sum(1 for i in range(11) if st.session_state.battle_rolls_user[i] == 1 and st.session_state.battle_rolls_cpu[i] == 6)
             yards_diff = abs(user_total - cpu_total)
-            bonus_yards = abs(bonus_count) * 5
             
             if user_total > cpu_total:
                 total_yards = yards_diff + (bonus_count * 5 if bonus_count > 0 else 0)
-                st.markdown(f"""
-                    <style>
-                    @keyframes victory {{
-                        0% {{ transform: scale(1); opacity: 0; }}
-                        50% {{ transform: scale(1.5); opacity: 1; }}
-                        100% {{ transform: scale(1); opacity: 1; }}
-                    }}
-                    .victory {{
-                        text-align: center;
-                        font-size: 60px;
-                        color: #00ff00;
-                        animation: victory 1s ease-out;
-                    }}
-                    </style>
-                    <div class='victory'>✅ YOU WIN! +{total_yards} YARDS</div>
-                """, unsafe_allow_html=True)
+                result = f"✅ {user_team.upper()} WIN! +{total_yards} yards"
                 if bonus_count > 0:
-                    st.success(f"⭐ {bonus_count} Domination Bonus! (+{bonus_count * 5} yards)")
+                    result += f" (⭐ +{bonus_count * 5} bonus)"
             elif user_total < cpu_total:
                 total_yards = yards_diff + (abs(bonus_count) * 5 if bonus_count < 0 else 0)
-                st.markdown(f"""
-                    <style>
-                    @keyframes defeat {{
-                        0% {{ transform: scale(1); opacity: 0; }}
-                        50% {{ transform: scale(1.5); opacity: 1; }}
-                        100% {{ transform: scale(1); opacity: 1; }}
-                    }}
-                    .defeat {{
-                        text-align: center;
-                        font-size: 60px;
-                        color: #ff0000;
-                        animation: defeat 1s ease-out;
-                    }}
-                    </style>
-                    <div class='defeat'>❌ CPU WINS! -{total_yards} YARDS</div>
-                """, unsafe_allow_html=True)
+                result = f"❌ {cpu_team.upper()} WIN! -{total_yards} yards"
                 if bonus_count < 0:
-                    st.error(f"💥 {abs(bonus_count)} Dominated! (-{abs(bonus_count) * 5} yards)")
+                    result += f" (💥 {abs(bonus_count) * 5} penalty)"
             else:
-                st.info("🤝 TIE! No change")
+                result = "🤝 TIE! No change"
+            
+            # Show result with helmet images
+            result_html = f"""
+            <div style='display: flex; align-items: center; justify-content: center; gap: 15px; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 10px;'>
+                <img src='{user_helmet}' width='40'/>
+                <span style='font-weight: bold; color: #00ff00;'>{user_team}: {user_total}</span>
+                <span style='font-size: 24px;'>⚔️</span>
+                <span style='font-weight: bold; color: #ff0000;'>{cpu_team}: {cpu_total}</span>
+                <img src='{cpu_helmet}' width='40'/>
+            </div>
+            """
+            st.markdown(result_html, unsafe_allow_html=True)
+            st.info(result)
+            
+            # HEAD TO HEAD DICE ANIMATION
+            dice_html = "<style>"
+            for i in range(11):
+                user_roll = st.session_state.battle_rolls_user[i]
+                cpu_roll = st.session_state.battle_rolls_cpu[i]
+                is_user_domination = (user_roll == 6 and cpu_roll == 1)
+                is_cpu_domination = (cpu_roll == 6 and user_roll == 1)
+                
+                user_color = "gold" if is_user_domination else "red" if is_cpu_domination else "#00ff00"
+                cpu_color = "gold" if is_cpu_domination else "red" if is_user_domination else "#ff0000"
+                
+                dice_html += f"""
+                @keyframes slideUser{i} {{
+                    0% {{ transform: translateX(-200px) rotateY(0deg); opacity: 0; }}
+                    50% {{ transform: translateX(0) rotateY(720deg); opacity: 1; }}
+                    100% {{ transform: translateX(0) rotateY(720deg); opacity: 1; }}
+                }}
+                @keyframes slideCpu{i} {{
+                    0% {{ transform: translateX(200px) rotateY(0deg); opacity: 0; }}
+                    50% {{ transform: translateX(0) rotateY(-720deg); opacity: 1; }}
+                    100% {{ transform: translateX(0) rotateY(-720deg); opacity: 1; }}
+                }}
+                .dice-user{i} {{
+                    animation: slideUser{i} 0.8s ease-out;
+                    color: {user_color};
+                    font-size: 28px;
+                    font-weight: bold;
+                    text-shadow: 0 0 10px rgba(0,255,0,0.5);
+                }}
+                .dice-cpu{i} {{
+                    animation: slideCpu{i} 0.8s ease-out;
+                    color: {cpu_color};
+                    font-size: 28px;
+                    font-weight: bold;
+                    text-shadow: 0 0 10px rgba(255,0,0,0.5);
+                }}
+                """
+            
+            dice_html += "</style><div style='margin: 20px 0;'>"
+            dice_html += "<div style='display: flex; justify-content: space-around; margin-bottom: 10px;'>"
+            for i in range(11):
+                user_roll = st.session_state.battle_rolls_user[i]
+                is_domination = (user_roll == 6 and st.session_state.battle_rolls_cpu[i] == 1)
+                bonus = "⭐" if is_domination else ""
+                dice_html += f"<div class='dice-user{i}'>🎲{user_roll}{bonus}</div>"
+            dice_html += "</div>"
+            
+            dice_html += "<div style='text-align: center; font-size: 40px; margin: 10px 0;'>⚔️ VS ⚔️</div>"
+            
+            dice_html += "<div style='display: flex; justify-content: space-around; margin-top: 10px;'>"
+            for i in range(11):
+                cpu_roll = st.session_state.battle_rolls_cpu[i]
+                is_domination = (cpu_roll == 6 and st.session_state.battle_rolls_user[i] == 1)
+                bonus = "⭐" if is_domination else ""
+                dice_html += f"<div class='dice-cpu{i}'>🎲{cpu_roll}{bonus}</div>"
+            dice_html += "</div></div>"
+            
+            st.markdown(dice_html, unsafe_allow_html=True)
         
-        # SNAP button
+        # SNAP button and 4th down options - compact
         st.markdown("---")
         
         # Check for field goal option on 4th down
@@ -903,6 +895,22 @@ def play_line_battle_main():
         
         # Field goal mode
         if st.session_state.battle_fg_mode:
+            # Check if already kicked
+            if "battle_fg_kicked" not in st.session_state:
+                st.session_state.battle_fg_kicked = False
+            
+            if st.session_state.battle_fg_kicked:
+                # Already kicked, just show continue button
+                if st.button("Continue", key="fg_continue", use_container_width=True):
+                    st.session_state.battle_possession = "cpu"
+                    st.session_state.battle_yards = 0
+                    st.session_state.battle_down = 1
+                    st.session_state.battle_yards_to_go = 10
+                    st.session_state.battle_fg_mode = False
+                    st.session_state.battle_fg_kicked = False
+                    st.rerun()
+                return
+            
             st.markdown("### 🦵 Field Goal Attempt")
             distance = st.session_state.battle_fg_distance
             wind = random.randint(-15, 15)
@@ -927,22 +935,17 @@ def play_line_battle_main():
                 
                 if angle_good and power_good:
                     st.balloons()
-                    st.success("✅ GOOD! You score 3 points!")
+                    st.success("✅ FIELD GOAL IS GOOD! You score 3 points!")
                     st.session_state.battle_score_user += 3
                 elif not angle_good:
                     if effective_angle < -10:
-                        st.error(f"❌ Wide left! Wind pushed it {abs(wind)} mph")
+                        st.error(f"❌ NO GOOD! Wide left! Wind pushed it {abs(wind)} mph")
                     else:
-                        st.error(f"❌ Wide right! Wind pushed it {abs(wind)} mph")
+                        st.error(f"❌ NO GOOD! Wide right! Wind pushed it {abs(wind)} mph")
                 else:
-                    st.error("❌ Wrong power! Too weak or too strong")
+                    st.error("❌ NO GOOD! Wrong power - too weak or too strong")
                 
-                # Reset
-                st.session_state.battle_possession = "cpu"
-                st.session_state.battle_yards = 0
-                st.session_state.battle_down = 1
-                st.session_state.battle_yards_to_go = 10
-                st.session_state.battle_fg_mode = False
+                st.session_state.battle_fg_kicked = True
                 st.rerun()
             
             if st.button("Cancel", key="fg_cancel"):
@@ -1026,17 +1029,13 @@ def play_line_battle_main():
             st.rerun()
     
     with col2:
-        st.markdown("### 📊 Game Stats")
-        st.write(f"Possession: {'🟢 You' if st.session_state.battle_possession == 'user' else '🔴 CPU'}")
+        st.markdown("**📊 Stats**")
         st.write(f"Down: {st.session_state.battle_down}")
-        st.write(f"To Go: {st.session_state.battle_yards_to_go} yards")
-        st.write(f"Current Drive: {st.session_state.battle_yards} yards")
-        if st.session_state.battle_yards > 0:
-            st.write(f"To TD: {30 - st.session_state.battle_yards} yards")
-        else:
-            st.write(f"Defending: {abs(st.session_state.battle_yards)} yards back")
-        
-        if st.button("Reset Game", key="battle_reset"):
+        st.write(f"To Go: {st.session_state.battle_yards_to_go}")
+        st.write(f"Drive: {st.session_state.battle_yards} yds")
+        if st.button("🔄 Reset", key="battle_reset", use_container_width=True):
+            del st.session_state.battle_user_team
+            del st.session_state.battle_cpu_team
             st.session_state.battle_score_user = 0
             st.session_state.battle_score_cpu = 0
             st.session_state.battle_yards = 0
@@ -1174,7 +1173,6 @@ def play_field_goal_kicker_main():
             power_good = min_power <= power <= max_power
             
             st.session_state.kicker_attempts += 1
-            st.session_state.kicker_score += 1  # 1 point for trying
             
             if angle_good and power_good:
                 if distance >= 50:
