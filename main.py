@@ -7,6 +7,11 @@ import random
 import requests
 from datetime import datetime, timedelta
 import pytz
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import string
+import csv
 
 # --------------- Firebase Setup -----------------
 firebaseConfig = {
@@ -730,6 +735,7 @@ def play_line_battle_main():
             bonus_count = sum(1 for i in range(11) if st.session_state.battle_rolls_user[i] == 6 and st.session_state.battle_rolls_cpu[i] == 1) - sum(1 for i in range(11) if st.session_state.battle_rolls_user[i] == 1 and st.session_state.battle_rolls_cpu[i] == 6)
             yards_diff = abs(user_total - cpu_total)
             
+            # 1) Show overall result first
             if user_total > cpu_total:
                 total_yards = yards_diff + (bonus_count * 5 if bonus_count > 0 else 0)
                 result = f"✅ {user_team.upper()} WIN! +{total_yards} yards"
@@ -742,6 +748,24 @@ def play_line_battle_main():
                     result += f" (💥 {abs(bonus_count) * 5} penalty)"
             else:
                 result = "🤝 TIE! No change"
+            
+            # 2) Show prediction result if available
+            if "battle_prediction_result" in st.session_state and st.session_state.battle_prediction_result:
+                pred_result = st.session_state.battle_prediction_result
+                if pred_result["correct"]:
+                    result += f" | ⭐ PREDICTION CORRECT! 2X MULTIPLIER!"
+                    # Apply multiplier to yards
+                    if user_total > cpu_total:
+                        total_yards *= 2
+                    elif user_total < cpu_total:
+                        total_yards *= 2
+                else:
+                    winning = pred_result['winning_sections']
+                    if winning:
+                        winning_str = ", ".join([s.upper() for s in winning])
+                        result += f" | 🔶 Wrong pick: {winning_str} won"
+                    else:
+                        result += f" | 🔶 Wrong pick: NO sections won"
             
             # Show result with helmet images
             result_html = f"""
@@ -817,6 +841,36 @@ def play_line_battle_main():
         
         # SNAP button and 4th down options - compact
         st.markdown("---")
+        
+        # Initialize line prediction if not set
+        if "battle_line_prediction" not in st.session_state:
+            st.session_state.battle_line_prediction = None
+        
+        # Show line section picker FIRST if no choice made
+        if st.session_state.battle_line_prediction is None:
+            st.info("🎯 Pick which section of the line will win! (2x multiplier if correct)")
+            col_l, col_m, col_r = st.columns(3)
+            with col_l:
+                if st.button("⬅️ LEFT (0-3)", key="pick_left", use_container_width=True):
+                    st.session_state.battle_line_prediction = "left"
+                    st.rerun()
+            with col_m:
+                if st.button("⬆️ MIDDLE (4-7)", key="pick_middle", use_container_width=True):
+                    st.session_state.battle_line_prediction = "middle"
+                    st.rerun()
+            with col_r:
+                if st.button("➡️ RIGHT (8-10)", key="pick_right", use_container_width=True):
+                    st.session_state.battle_line_prediction = "right"
+                    st.rerun()
+            return  # Don't show SNAP button until choice is made
+        
+        # Show choice and SNAP button
+        prediction_display = {
+            "left": "⬅️ LEFT (0-3)",
+            "middle": "⬆️ MIDDLE (4-7)",
+            "right": "➡️ RIGHT (8-10)"
+        }
+        st.info(f"🎯 Your Pick: {prediction_display[st.session_state.battle_line_prediction]}")
         
         # Check for field goal option on 4th down
         if st.session_state.battle_down == 4:
@@ -987,8 +1041,47 @@ def play_line_battle_main():
             user_total = sum(user_rolls)
             cpu_total = sum(cpu_rolls)
             
-            # Calculate yardage based on difference
-            yards_diff = abs(user_total - cpu_total)
+            # Calculate which section won (just needs to win, not dominate)
+            left_user = sum(user_rolls[0:4])
+            left_cpu = sum(cpu_rolls[0:4])
+            middle_user = sum(user_rolls[4:8])
+            middle_cpu = sum(cpu_rolls[4:8])
+            right_user = sum(user_rolls[8:11])
+            right_cpu = sum(cpu_rolls[8:11])
+            
+            # Check if predicted section won
+            prediction_correct = False
+            if st.session_state.battle_line_prediction == "left" and left_user > left_cpu:
+                prediction_correct = True
+            elif st.session_state.battle_line_prediction == "middle" and middle_user > middle_cpu:
+                prediction_correct = True
+            elif st.session_state.battle_line_prediction == "right" and right_user > right_cpu:
+                prediction_correct = True
+            
+            multiplier = 2 if prediction_correct else 1
+            
+            # Store prediction result for display
+            winning_sections = []
+            if left_user > left_cpu:
+                winning_sections.append("left")
+            if middle_user > middle_cpu:
+                winning_sections.append("middle")
+            if right_user > right_cpu:
+                winning_sections.append("right")
+            
+            st.session_state.battle_prediction_result = {
+                "predicted": st.session_state.battle_line_prediction,
+                "winning_sections": winning_sections,
+                "correct": prediction_correct,
+                "multiplier": multiplier
+            }
+            
+            # Reset prediction for next play
+            st.session_state.battle_line_prediction = None
+            
+            # Calculate yardage based on difference (with multiplier if prediction correct)
+            multiplier = st.session_state.battle_prediction_result.get("multiplier", 1) if "battle_prediction_result" in st.session_state else 1
+            yards_diff = abs(user_total - cpu_total) * multiplier
             
             # Check for 1 vs 6 matchups (bonus 5 yards each)
             bonus_yards = 0
@@ -1279,6 +1372,11 @@ def main():
     if st.sidebar.button("🎮 Games", use_container_width=True):
         st.session_state.page = "games"
     
+    # Admin only - Email Outreach
+    if st.session_state.email == "mwill1003@gmail.com":
+        if st.sidebar.button("📧 Email Outreach", use_container_width=True):
+            st.session_state.page = "outreach"
+    
     # Show appropriate page
     if st.session_state.page == "grid":
         show_odds_ticker()
@@ -1286,6 +1384,8 @@ def main():
         show_user_stats()
     elif st.session_state.page == "games":
         show_games_page()
+    elif st.session_state.page == "outreach":
+        show_outreach_page()
 
 def show_odds_ticker():
     st.markdown("### 🎰 Current Super Bowl Odds")
@@ -1308,7 +1408,7 @@ def show_odds_ticker():
     if odds_data:
         odds_text = countdown + " • " + " • ".join(odds_data) + " • "
     else:
-        odds_text = countdown + " • Super Bowl LX • Feb 8, 2026 • Caesars Superdome, New Orleans • "
+        odds_text = countdown + " • Super Bowl LX • Feb 8, 2026 • Levi's Stadium, Santa Clara, CA • "
     
     st.markdown(
         f"""
@@ -1475,6 +1575,15 @@ def show_user_stats():
     
     if is_admin:
         st.sidebar.markdown("---")
+        st.sidebar.markdown("### 📧 Invite Player")
+        invite_email = st.sidebar.text_input("Email address", key="invite_email")
+        if st.sidebar.button("Send Invite", key="send_invite"):
+            if invite_email:
+                send_invite_email(invite_email)
+            else:
+                st.sidebar.error("Enter an email")
+        
+        st.sidebar.markdown("---")
         st.sidebar.markdown("### ✅ Mark as Paid")
         all_squares = get_all_squares()
         players_payment = {}
@@ -1493,6 +1602,13 @@ def show_user_stats():
                 mark_player_paid(player_email, True)
             else:
                 mark_player_paid(player_email, False)
+        
+        # Payment reminder button
+        unpaid_players = [email for email, info in players_payment.items() if not info.get("paid", False)]
+        if unpaid_players:
+            st.sidebar.markdown("---")
+            if st.sidebar.button(f"💸 Send Payment Reminder ({len(unpaid_players)})", use_container_width=True):
+                send_payment_reminders(unpaid_players, players_payment)
     
     st.sidebar.markdown("---")
     st.sidebar.markdown("### Players Legend")
@@ -1518,6 +1634,252 @@ def mark_player_paid(player_email, paid_status):
     for doc in squares_ref.stream():
         doc.reference.update({"paid": paid_status})
     get_all_squares.clear()
+
+def send_invite_email(email):
+    try:
+        # Generate temporary password
+        temp_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+        
+        # Create user in Firebase with temp password
+        try:
+            auth.create_user_with_email_and_password(email, temp_password)
+        except:
+            # User might already exist, reset password instead
+            auth.send_password_reset_email(email)
+            st.sidebar.success(f"Password reset sent to {email}")
+            return
+        
+        # Send email with credentials
+        smtp_config = st.secrets["smtp"]
+        
+        msg = MIMEMultipart()
+        msg['From'] = smtp_config["user"]
+        msg['To'] = email
+        msg['Subject'] = "🏈 You're Invited to Super Bowl Squares!"
+        
+        body = f"""Hi there!
+
+You've been invited to join our Super Bowl Squares pool!
+
+Login at: https://footballpool.streamlit.app
+
+Your temporary credentials:
+Email: {email}
+Password: {temp_password}
+
+Please login and claim your squares. Each square is $10.
+
+Good luck!
+"""
+        
+        msg.attach(MIMEText(body, 'plain'))
+        
+        server = smtplib.SMTP(smtp_config["server"], smtp_config["port"])
+        server.starttls()
+        server.login(smtp_config["user"], smtp_config["password"])
+        server.send_message(msg)
+        server.quit()
+        
+        st.sidebar.success(f"✅ Invite sent to {email}")
+    except Exception as e:
+        st.sidebar.error(f"Error: {str(e)}")
+
+def send_payment_reminders(unpaid_emails, players_payment):
+    """Send payment reminder emails to unpaid players"""
+    smtp_config = st.secrets["smtp"]
+    
+    sent_count = 0
+    failed = []
+    
+    for player_email in unpaid_emails:
+        try:
+            square_count = players_payment[player_email]["count"]
+            amount = square_count * 10
+            name = player_email.split("@")[0]
+            
+            venmo_url = f"https://venmo.com/u/michael-williams-200?txn=pay&amount={amount}&note=Football%20Pool%20-%20{square_count}%20squares"
+            
+            msg = MIMEMultipart()
+            msg['From'] = smtp_config["user"]
+            msg['To'] = player_email
+            msg['Subject'] = "🏈 Payment Reminder: Super Bowl Squares Pool"
+            
+            body = f"""Hey {name}!
+
+Just a friendly reminder that you have {square_count} square{'s' if square_count > 1 else ''} claimed in our Super Bowl Squares pool.
+
+Total due: ${amount}
+
+Pay now via Venmo:
+{venmo_url}
+
+Or search: @michael-williams-200
+Note: "Football Pool - {square_count} squares"
+
+Thanks!
+- Michael
+"""
+            
+            msg.attach(MIMEText(body, 'plain'))
+            
+            server = smtplib.SMTP(smtp_config["server"], smtp_config["port"])
+            server.starttls()
+            server.login(smtp_config["user"], smtp_config["password"])
+            server.send_message(msg)
+            server.quit()
+            
+            sent_count += 1
+            
+        except Exception as e:
+            failed.append((player_email, str(e)))
+    
+    if sent_count > 0:
+        st.sidebar.success(f"✅ Sent {sent_count} payment reminders")
+    if failed:
+        st.sidebar.error(f"❌ Failed to send {len(failed)} reminders")
+# --------------- Email Outreach Page -----------------
+
+def show_outreach_page():
+    st.title("📧 Email Outreach")
+    
+    # Email content
+    subject = "🏈 BREAKING: Seahawks Fans Get First Pick at Super Bowl Squares! (Just Kidding... Or Am I?) 🦅"
+    body = """Hey there, 12s (and other assorted football enthusiasts)!
+
+Remember Super Bowl XLIX? Yeah, me neither. I've blocked it out. Therapy is expensive.
+
+But here's the good news: Super Bowl LX is coming February 8, 2026, and THIS time we're not leaving it up to fate, questionable play-calling, or Malcolm Butler's reflexes. We're leaving it up to MATH and RANDOM NUMBERS! 🎲
+
+Introducing: The Super Bowl Squares Pool That Will Definitely Not Break Your Heart Like That One Play Did!
+
+🎮 Join here: https://futbolislife.streamlit.app
+
+💰 THE DEAL:
+• $10 per square (cheaper than therapy, more fun than yelling at your TV)
+• Pick your squares NOW before your cousin Gary takes all the good ones
+• Numbers randomized before kickoff (totally fair, unlike certain referees)
+• Win cold hard cash for each quarter!
+
+💵 PRIZE BREAKDOWN:
+• Q1: 10% of pot (early bird gets the worm)
+• Q2: 15% of pot (halftime snack money)
+• Q3: 25% of pot (now we're talking)
+• Final: 50% of pot (BIG MONEY, NO WHAMMIES)
+
+🏆 LAST YEAR'S WINNERS:
+Luke Rubik, Derek Slusarski, Donny Slotty, and Kyle Ralph all took home cash! Will YOU be next?
+
+🦅 SEAHAWKS FAN BONUS:
+If you're still bitter about 2015, this is your chance for redemption. Or at least some cash to ease the pain. Plus, you can play our mini-games while pretending you're calling better plays than... well, you know.
+
+🎯 MINI-GAMES INCLUDED:
+• Catch the Football (faster reflexes than you-know-who)
+• Field Goal Kicker (because sometimes you SHOULD kick it)
+• Line Battle (dice-based football - no heartbreak guaranteed!)
+
+💳 PAYMENT:
+Venmo: @michael-williams-200
+(Please include "Not Still Mad About 2015" in the memo)
+
+Claim your squares before they're gone! And remember: in Super Bowl Squares, EVERYONE has a chance to win. Unlike certain goal-line situations we shall not speak of.
+
+Go Hawks! (And also go other teams, I guess) 🏈
+
+P.S. - Yes, I'm a diehard fair-weather Seahawks fan. I only show up when they're winning... or when there's money involved. 💰
+
+- Michael
+"""
+    
+    # Preview section
+    st.markdown("### 👀 Email Preview")
+    with st.expander("📨 Click to view email content", expanded=True):
+        st.markdown(f"**Subject:** {subject}")
+        st.markdown("---")
+        st.text(body)
+    
+    st.markdown("---")
+    
+    # Load contacts from CSV
+    try:
+        with open('outreach.csv', 'r') as file:
+            reader = csv.DictReader(file)
+            contacts = list(reader)
+        
+        st.markdown(f"### 📊 Recipients ({len(contacts)} contacts)")
+        
+        # Show contacts in a nice format
+        with st.expander("📄 View all recipients"):
+            for contact in contacts:
+                st.write(f"• {contact['Name']} ({contact['Email']})")
+        
+        st.markdown("---")
+        
+        # Send emails section
+        st.markdown("### 🚀 Send Emails")
+        st.warning("⚠️ This will send the email to ALL contacts in the list!")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("📧 SEND TO ALL", type="primary", use_container_width=True):
+                send_bulk_emails(contacts, subject, body)
+        
+        with col2:
+            if st.button("🧪 Test Send (to yourself)", use_container_width=True):
+                test_contact = [{"Name": "Test", "Email": st.session_state.email}]
+                send_bulk_emails(test_contact, subject, body)
+    
+    except FileNotFoundError:
+        st.error("❌ outreach.csv file not found!")
+    except Exception as e:
+        st.error(f"❌ Error loading contacts: {str(e)}")
+
+def send_bulk_emails(contacts, subject, body):
+    """Send emails to a list of contacts"""
+    smtp_config = st.secrets["smtp"]
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    sent_count = 0
+    failed = []
+    
+    for idx, contact in enumerate(contacts):
+        name = contact['Name']
+        email = contact['Email']
+        
+        try:
+            # Create message
+            msg = MIMEMultipart()
+            msg['From'] = smtp_config["user"]
+            msg['To'] = email
+            msg['Subject'] = subject
+            msg.attach(MIMEText(body, 'plain'))
+            
+            # Send email
+            server = smtplib.SMTP(smtp_config["server"], smtp_config["port"])
+            server.starttls()
+            server.login(smtp_config["user"], smtp_config["password"])
+            server.send_message(msg)
+            server.quit()
+            
+            sent_count += 1
+            status_text.text(f"✅ Sent to {name} ({email})")
+            
+        except Exception as e:
+            failed.append((name, email, str(e)))
+            status_text.text(f"❌ Failed: {name} ({email})")
+        
+        # Update progress
+        progress_bar.progress((idx + 1) / len(contacts))
+    
+    # Summary
+    st.success(f"✅ Successfully sent: {sent_count}/{len(contacts)}")
+    
+    if failed:
+        st.error(f"❌ Failed: {len(failed)}")
+        with st.expander("View failed emails"):
+            for name, email, error in failed:
+                st.write(f"• {name} ({email}): {error}")
 
 # --------------- 2048 Football Game (COMMENTED OUT) -----------------
 
@@ -1746,7 +2108,6 @@ def mark_player_paid(player_email, paid_status):
 #         st.session_state.memory_first = None
 #     
 #     st.rerun()
-
 
 # --------------- Run -----------------
 if __name__ == "__main__":

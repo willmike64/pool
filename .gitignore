@@ -40,3 +40,5 @@ update_avatars.py
 update_teaching_notes.py
 TeachingNotes
 search_syllabus.py
+outreach.csv
+send_invites.py
