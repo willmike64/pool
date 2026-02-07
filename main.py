@@ -16,44 +16,49 @@ import csv
 st.set_page_config(
     page_title="Super Bowl Squares",
     page_icon="🏈",
-    layout="wide",            # keep web wide
+    layout="centered",
     initial_sidebar_state="collapsed"
 )
 
 st.markdown("""
 <style>
-
-/* Make buttons full-width on mobile */
-@media (max-width: 768px) {
-    .stButton > button {
-        width: 100%;
-        font-size: 1.1rem;
-        padding: 0.75rem;
-    }
-
-    /* Stack columns vertically */
-    div[data-testid="column"] {
-        width: 100% !important;
-        flex: 1 1 100% !important;
-    }
-
-    /* Reduce table overflow */
-    .stDataFrame {
-        overflow-x: auto;
-    }
-
-    /* Bigger touch targets */
-    input, textarea {
-        font-size: 1.05rem !important;
-    }
-
-    /* Tighten padding */
-    .block-container {
-        padding-left: 1rem;
-        padding-right: 1rem;
-    }
+/* Compact grid buttons */
+.compact-grid .stButton > button {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  padding: 0 !important;
+  font-size: 0.7rem !important;
+  margin: 1px !important;
 }
 
+/* Mobile layout */
+@media (max-width: 768px) {
+  body:not(.compact-mode) .stButton > button {
+    width: 100%;
+    font-size: 1.05rem;
+    padding: 0.75rem;
+  }
+
+  .block-container {
+    padding: 1rem !important;
+    max-width: 100vw !important;
+  }
+
+  .stColumn {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+
+  .compact-grid .stColumn {
+    width: auto !important;
+    flex: 0 0 auto !important;
+  }
+  
+  section.main > div {
+    max-width: 100% !important;
+  }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -272,6 +277,19 @@ def draw_grid():
     if not numbers_randomized:
         st.warning("⚠️ Numbers are currently 0-9 in order. They will be randomized before kickoff.")
     
+    # Compact mode toggle
+    if "compact_grid" not in st.session_state:
+        st.session_state.compact_grid = False
+    
+    if st.button("🔍 Switch to Compact View" if not st.session_state.compact_grid else "🔎 Switch to Normal View"):
+        st.session_state.compact_grid = not st.session_state.compact_grid
+        st.rerun()
+    
+    # Open compact-grid wrapper
+    if st.session_state.compact_grid:
+        st.markdown('<div class="compact-grid">', unsafe_allow_html=True)
+        st.markdown('<script>document.body.classList.add("compact-mode");</script>', unsafe_allow_html=True)
+    
     st.markdown(f"### {config.get('top_team', 'NFC Team')} →")
     header_cols = st.columns([1] + [1]*10)
     header_cols[0].write("")
@@ -305,6 +323,10 @@ def draw_grid():
                     claim_square(square_id)
     
     st.markdown(f"### ↑ {config.get('side_team', 'AFC Team')}")
+    
+    # Close compact-grid wrapper
+    if st.session_state.compact_grid:
+        st.markdown('</div>', unsafe_allow_html=True)
     
     # Display Payouts
     st.markdown("---")

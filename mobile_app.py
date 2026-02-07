@@ -238,7 +238,7 @@ def squares_page() -> None:
     top_numbers = config.get("top_numbers", list(range(10)))
     side_numbers = config.get("side_numbers", list(range(10)))
 
-    # Check if we just claimed a square
+    # Check if we just claimed a square OR viewing grid
     if st.session_state.get("show_grid_snapshot"):
         show_grid_snapshot(config, all_squares, email)
         st.markdown("---")
@@ -246,6 +246,11 @@ def squares_page() -> None:
             st.session_state.show_grid_snapshot = False
             st.rerun()
         return
+
+    # View Grid button at top
+    if st.button("🖼️ View Full Grid", use_container_width=True):
+        st.session_state.show_grid_snapshot = True
+        st.rerun()
 
     st.markdown("### 📍 Quick Claim (mobile friendly)")
     st.caption("Pick a grid reference and claim the square if it's open.")
