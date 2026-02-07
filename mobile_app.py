@@ -301,27 +301,119 @@ def squares_page() -> None:
                 )
 
     st.markdown("---")
-    st.markdown("### 🎲 Random Pick")
+    st.markdown("### 🤖 AI-Powered Random Pick")
+    st.caption("Let AI help you pick the best squares!")
     
     # Count available squares
     available_squares = [sid for sid in [f"{r}-{c}" for r in range(10) for c in range(10)] if sid not in all_squares]
     
     if available_squares:
         num_to_pick = st.number_input(
-            f"Pick how many squares randomly (max {len(available_squares)} available)",
+            f"How many squares? (max {len(available_squares)} available)",
             min_value=1,
             max_value=min(len(available_squares), 20),
             value=1,
             key="random_count"
         )
         
-        if st.button(f"🎲 Claim {num_to_pick} Random Square{'s' if num_to_pick > 1 else ''}", use_container_width=True):
-            import random
-            picked = random.sample(available_squares, num_to_pick)
-            for sid in picked:
-                legacy.claim_square(sid)
-            st.session_state.show_grid_snapshot = True
-            st.rerun()
+        st.markdown("**Pick your strategy:**")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🎲 Totally Random", use_container_width=True, help="Pure random selection"):
+                import random
+                picked = random.sample(available_squares, num_to_pick)
+                for sid in picked:
+                    legacy.claim_square(sid)
+                st.session_state.show_grid_snapshot = True
+                st.rerun()
+            
+            if st.button("🎯 Center Power", use_container_width=True, help="Pick center squares - statistically more action!"):
+                import random
+                # Center squares (rows/cols 3-6) tend to have more combinations
+                center_squares = [s for s in available_squares if 3 <= int(s.split("-")[0]) <= 6 and 3 <= int(s.split("-")[1]) <= 6]
+                picked = random.sample(center_squares if len(center_squares) >= num_to_pick else available_squares, num_to_pick)
+                for sid in picked:
+                    legacy.claim_square(sid)
+                st.session_state.show_grid_snapshot = True
+                st.rerun()
+            
+            if st.button("🔲 Spread Out", use_container_width=True, help="Maximize distance between squares"):
+                import random
+                picked = []
+                remaining = available_squares.copy()
+                while len(picked) < num_to_pick and remaining:
+                    if not picked:
+                        choice = random.choice(remaining)
+                    else:
+                        # Pick square farthest from existing picks
+                        best_square = None
+                        best_min_dist = -1
+                        for candidate in remaining:
+                            r1, c1 = map(int, candidate.split("-"))
+                            min_dist = min(abs(r1-int(p.split("-")[0])) + abs(c1-int(p.split("-")[1])) for p in picked)
+                            if min_dist > best_min_dist:
+                                best_min_dist = min_dist
+                                best_square = candidate
+                        choice = best_square
+                    picked.append(choice)
+                    remaining.remove(choice)
+                for sid in picked:
+                    legacy.claim_square(sid)
+                st.session_state.show_grid_snapshot = True
+                st.rerun()
+        
+        with col2:
+            if st.button("⛔ No Neighbors", use_container_width=True, help="No consecutive squares"):
+                import random
+                picked = []
+                remaining = available_squares.copy()
+                while len(picked) < num_to_pick and remaining:
+                    choice = random.choice(remaining)
+                    r, c = map(int, choice.split("-"))
+                    picked.append(choice)
+                    # Remove neighbors
+                    neighbors = [f"{r+dr}-{c+dc}" for dr in [-1,0,1] for dc in [-1,0,1]]
+                    remaining = [s for s in remaining if s not in neighbors]
+                for sid in picked:
+                    legacy.claim_square(sid)
+                st.session_state.show_grid_snapshot = True
+                st.rerun()
+            
+            if st.button("🚫 Avoid Stacking", use_container_width=True, help="Different rows & columns"):
+                import random
+                picked = []
+                used_rows = set()
+                used_cols = set()
+                remaining = available_squares.copy()
+                random.shuffle(remaining)
+                for candidate in remaining:
+                    if len(picked) >= num_to_pick:
+                        break
+                    r, c = map(int, candidate.split("-"))
+                    if r not in used_rows and c not in used_cols:
+                        picked.append(candidate)
+                        used_rows.add(r)
+                        used_cols.add(c)
+                # Fill remaining if needed
+                while len(picked) < num_to_pick and remaining:
+                    choice = random.choice([s for s in remaining if s not in picked])
+                    picked.append(choice)
+                for sid in picked:
+                    legacy.claim_square(sid)
+                st.session_state.show_grid_snapshot = True
+                st.rerun()
+            
+            if st.button("🍀 Lucky Corners", use_container_width=True, help="Prioritize corner & edge squares"):
+                import random
+                corners = ["0-0", "0-9", "9-0", "9-9"]
+                edges = [f"{r}-{c}" for r in [0,9] for c in range(10)] + [f"{r}-{c}" for r in range(10) for c in [0,9]]
+                priority = [s for s in available_squares if s in corners] + [s for s in available_squares if s in edges and s not in corners]
+                picked = random.sample(priority[:num_to_pick] if len(priority) >= num_to_pick else available_squares, num_to_pick)
+                for sid in picked:
+                    legacy.claim_square(sid)
+                st.session_state.show_grid_snapshot = True
+                st.rerun()
     else:
         st.info("No squares available for random selection.")
 
