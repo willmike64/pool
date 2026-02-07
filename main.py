@@ -13,6 +13,51 @@ from email.mime.multipart import MIMEMultipart
 import string
 import csv
 
+st.set_page_config(
+    page_title="Super Bowl Squares",
+    page_icon="🏈",
+    layout="wide",            # keep web wide
+    initial_sidebar_state="collapsed"
+)
+
+st.markdown("""
+<style>
+
+/* Make buttons full-width on mobile */
+@media (max-width: 768px) {
+    .stButton > button {
+        width: 100%;
+        font-size: 1.1rem;
+        padding: 0.75rem;
+    }
+
+    /* Stack columns vertically */
+    div[data-testid="column"] {
+        width: 100% !important;
+        flex: 1 1 100% !important;
+    }
+
+    /* Reduce table overflow */
+    .stDataFrame {
+        overflow-x: auto;
+    }
+
+    /* Bigger touch targets */
+    input, textarea {
+        font-size: 1.05rem !important;
+    }
+
+    /* Tighten padding */
+    .block-container {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+
 # --------------- Firebase Setup -----------------
 firebaseConfig = {
     "apiKey": st.secrets["FIREBASE_API_KEY"],
@@ -1359,33 +1404,36 @@ def main():
         login_user()
         return
     
-    # Initialize page state
-    if "page" not in st.session_state:
-        st.session_state.page = "grid"
+    # Mobile-first tab navigation
+    email = st.session_state.get("email")
+    is_admin = email == "mwill1003@gmail.com"
     
-    st.sidebar.write(f"👤 {st.session_state.email}")
+    # Create tabs based on user role
+    if is_admin:
+        tabs = st.tabs(["🏈 Squares", "🎮 Games", "📧 Outreach", "⚙️ Account"])
+    else:
+        tabs = st.tabs(["🏈 Squares", "🎮 Games", "⚙️ Account"])
     
-    # Navigation
-    st.sidebar.markdown("---")
-    if st.sidebar.button("🏈 Grid", use_container_width=True):
-        st.session_state.page = "grid"
-    if st.sidebar.button("🎮 Games", use_container_width=True):
-        st.session_state.page = "games"
-    
-    # Admin only - Email Outreach
-    if st.session_state.email == "mwill1003@gmail.com":
-        if st.sidebar.button("📧 Email Outreach", use_container_width=True):
-            st.session_state.page = "outreach"
-    
-    # Show appropriate page
-    if st.session_state.page == "grid":
+    # Squares tab
+    with tabs[0]:
         show_odds_ticker()
         draw_grid()
-        show_user_stats()
-    elif st.session_state.page == "games":
+    
+    # Games tab
+    with tabs[1]:
         show_games_page()
-    elif st.session_state.page == "outreach":
-        show_outreach_page()
+    
+    # Outreach tab (admin only)
+    if is_admin:
+        with tabs[2]:
+            show_outreach_page()
+        # Account tab for admin
+        with tabs[3]:
+            show_user_stats()
+    else:
+        # Account tab for regular users
+        with tabs[2]:
+            show_user_stats()
 
 def show_odds_ticker():
     st.markdown("### 🎰 Current Super Bowl Odds")
