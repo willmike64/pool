@@ -255,6 +255,60 @@ def squares_page() -> None:
     st.markdown("### 📍 Quick Claim (mobile friendly)")
     st.caption("Pick a grid reference and claim the square if it's open.")
 
+    # Number Grid - Compact view
+    # Create player number mapping
+    player_numbers = {}
+    player_count = 1
+    for sid in sorted(all_squares.keys()):
+        data = all_squares[sid]
+        claimed_by = data.get("claimed_by")
+        if claimed_by and claimed_by not in player_numbers:
+            player_numbers[claimed_by] = player_count
+            player_count += 1
+    
+    # Show legend at top
+    if player_numbers:
+        st.markdown("**Legend:**")
+        if email in player_numbers:
+            st.info(f"👉 Your number: **{player_numbers[email]}**")
+        
+        legend_parts = []
+        for player_email, num in sorted(player_numbers.items(), key=lambda x: x[1]):
+            name = player_email.split("@")[0]
+            if player_email == email:
+                legend_parts.append(f"**{num}. {name} (You)**")
+            else:
+                legend_parts.append(f"{num}. {name}")
+        
+        st.caption(" | ".join(legend_parts))
+    
+    # Build HTML table for better mobile rendering
+    html = "<style>.num-grid{width:100%;border-collapse:collapse;font-size:11px;margin:10px 0;}.num-grid td,.num-grid th{border:1px solid #444;padding:4px;text-align:center;min-width:24px;}.num-grid .mine{background:#2d5;font-weight:bold;color:#fff;}.num-grid .taken{background:#555;color:#aaa;}.num-grid .open{background:#222;color:#666;}</style>"
+    html += "<table class='num-grid'><tr><th></th>"
+    
+    # Header row
+    for num in top_numbers:
+        html += f"<th>{num}</th>"
+    html += "</tr>"
+    
+    # Grid rows
+    for i in range(10):
+        html += f"<tr><th>{side_numbers[i]}</th>"
+        for j in range(10):
+            square_id = f"{i}-{j}"
+            data = all_squares.get(square_id)
+            if data:
+                claimed_by = data.get("claimed_by")
+                player_num = player_numbers.get(claimed_by, "?")
+                css_class = "mine" if claimed_by == email else "taken"
+                html += f"<td class='{css_class}'>{player_num}</td>"
+            else:
+                html += "<td class='open'>-</td>"
+        html += "</tr>"
+    html += "</table>"
+    
+    st.markdown(html, unsafe_allow_html=True)
+
     c1, c2 = st.columns(2)
     with c1:
         nfc_digit = st.selectbox(f"{top_team} (top) grid reference", top_numbers, key="qc_nfc")
@@ -499,6 +553,65 @@ def squares_page() -> None:
         except Exception:
             pass
         legacy.draw_grid()
+    
+    # Experimental: Number-based grid (no icons)
+    with st.expander("🔢 Experimental: Number Grid (Mobile Optimized)"):
+        st.caption("Compact grid using player numbers instead of icons")
+        
+        # Create player number mapping
+        player_numbers = {}
+        player_count = 1
+        for sid in sorted(all_squares.keys()):
+            data = all_squares[sid]
+            claimed_by = data.get("claimed_by")
+            if claimed_by and claimed_by not in player_numbers:
+                player_numbers[claimed_by] = player_count
+                player_count += 1
+        
+        # Build HTML table for better mobile rendering
+        html = "<style>.num-grid{width:100%;border-collapse:collapse;font-size:11px;}.num-grid td,.num-grid th{border:1px solid #444;padding:4px;text-align:center;min-width:24px;}.num-grid .mine{background:#2d5;font-weight:bold;}.num-grid .taken{background:#555;}.num-grid .open{background:#222;}</style>"
+        html += "<table class='num-grid'><tr><th></th>"
+        
+        # Header row
+        for num in top_numbers:
+            html += f"<th>{num}</th>"
+        html += "</tr>"
+        
+        # Grid rows
+        for i in range(10):
+            html += f"<tr><th>{side_numbers[i]}</th>"
+            for j in range(10):
+                square_id = f"{i}-{j}"
+                data = all_squares.get(square_id)
+                if data:
+                    claimed_by = data.get("claimed_by")
+                    player_num = player_numbers.get(claimed_by, "?")
+                    css_class = "mine" if claimed_by == email else "taken"
+                    html += f"<td class='{css_class}'>{player_num}</td>"
+                else:
+                    html += "<td class='open'>-</td>"
+            html += "</tr>"
+        html += "</table>"
+        
+        st.markdown(html, unsafe_allow_html=True)
+        
+        # Legend
+        st.markdown("**Legend:**")
+        if email in player_numbers:
+            st.write(f"👉 Your number: **{player_numbers[email]}**")
+        
+        legend_lines = []
+        for player_email, num in sorted(player_numbers.items(), key=lambda x: x[1]):
+            name = player_email.split("@")[0]
+            if player_email == email:
+                legend_lines.append(f"**{num}. {name} (You)**")
+            else:
+                legend_lines.append(f"{num}. {name}")
+        
+        st.markdown(" | ".join(legend_lines[:10]))  # Show first 10
+        if len(legend_lines) > 10:
+            with st.expander("Show all players"):
+                st.markdown("\n".join(legend_lines))
 
 
 def games_page() -> None:
