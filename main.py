@@ -367,6 +367,150 @@ def draw_grid():
                 else:
                     st.markdown(f"**{quarter}**")
                     st.markdown("Not set")
+    
+    # Experimental HTML Grid
+    st.markdown("---")
+    st.markdown("### 🧪 Experimental HTML Grid (Mobile-Optimized)")
+    
+    if "html_grid_clicked" in st.session_state and st.session_state.html_grid_clicked:
+        square_id = st.session_state.html_grid_clicked
+        if square_id in squares:
+            data = squares[square_id]
+            if data.get("claimed_by") == email and not data.get("paid", False):
+                unclaim_square(square_id)
+        else:
+            claim_square(square_id)
+        st.session_state.html_grid_clicked = None
+        st.rerun()
+    
+    # Build HTML grid
+    grid_html = f"""
+    <style>
+    .html-grid {{
+        display: grid;
+        grid-template-columns: 30px repeat(10, 1fr);
+        gap: 2px;
+        max-width: 100%;
+        margin: 20px auto;
+        font-size: 12px;
+    }}
+    .grid-cell {{
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #444;
+        cursor: pointer;
+        font-size: 20px;
+        transition: transform 0.2s;
+    }}
+    .grid-cell:hover {{
+        transform: scale(1.1);
+        z-index: 10;
+    }}
+    .grid-header {{
+        background: #2d2d2d;
+        font-weight: bold;
+        color: #ffd700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }}
+    .grid-unclaimed {{
+        background: #f0f0f0;
+        animation: pulse-html 2s infinite;
+    }}
+    .grid-claimed {{
+        background: #444;
+    }}
+    .grid-paid {{
+        background: #444;
+        border: 2px solid #00ff00;
+        box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+    }}
+    .grid-mine {{
+        background: #555;
+        border: 2px solid #ffd700;
+    }}
+    @keyframes pulse-html {{
+        0%, 100% {{ opacity: 1; }}
+        50% {{ opacity: 0.6; }}
+    }}
+    @media (max-width: 768px) {{
+        .html-grid {{
+            font-size: 10px;
+        }}
+        .grid-cell {{
+            font-size: 16px;
+        }}
+    }}
+    </style>
+    <div class="html-grid">
+        <div class="grid-header"></div>
+    """
+    
+    # Top numbers header
+    for num in top_numbers:
+        grid_html += f'<div class="grid-header">{num}</div>'
+    
+    # Grid rows
+    for i in range(10):
+        # Side number
+        grid_html += f'<div class="grid-header">{side_numbers[i]}</div>'
+        
+        # Squares
+        for j in range(10):
+            square_id = f"{i}-{j}"
+            if square_id in squares:
+                data = squares[square_id]
+                avatar = data.get("avatar", "❌")
+                claimed_by = data.get("claimed_by")
+                paid = data.get("paid", False)
+                
+                if paid:
+                    css_class = "grid-paid"
+                    display = f"✅{avatar}"
+                elif claimed_by == email:
+                    css_class = "grid-mine"
+                    display = avatar
+                else:
+                    css_class = "grid-claimed"
+                    display = avatar
+                
+                grid_html += f'<div class="grid-cell {css_class}" onclick="handleSquareClick(\'{square_id}\')">{ display}</div>'
+            else:
+                grid_html += f'<div class="grid-cell grid-unclaimed" onclick="handleSquareClick(\'{square_id}\')">⬜</div>'
+    
+    grid_html += """
+    </div>
+    <script>
+    function handleSquareClick(squareId) {
+        // Use Streamlit's component communication
+        window.parent.postMessage({
+            type: 'streamlit:setComponentValue',
+            value: squareId
+        }, '*');
+        
+        // Fallback: reload with query param
+        const url = new URL(window.location);
+        url.searchParams.set('clicked', squareId);
+        window.location.href = url.toString();
+    }
+    </script>
+    """
+    
+    st.markdown(grid_html, unsafe_allow_html=True)
+    
+    # Check for query param click
+    try:
+        import streamlit.components.v1 as components
+        clicked = st.query_params.get("clicked")
+        if clicked:
+            st.session_state.html_grid_clicked = clicked
+            st.query_params.clear()
+            st.rerun()
+    except:
+        pass
 
 # --------------- Claim Logic -----------------
 
@@ -1812,57 +1956,129 @@ Thanks!
 def show_outreach_page():
     st.title("📧 Email Outreach")
     
-    # Email content
-    subject = "🏈 BREAKING: Seahawks Fans Get First Pick at Super Bowl Squares! (Just Kidding... Or Am I?) 🦅"
-    body = """Hey there, 12s (and other assorted football enthusiasts)!
+    # Get all participants (anyone who has claimed squares)
+    all_squares = get_all_squares()
+    participants = {}
+    for square_id, data in all_squares.items():
+        email = data.get("claimed_by")
+        if email and email not in participants:
+            participants[email] = True
+    
+    participant_emails = list(participants.keys())
+    total_squares = len(all_squares)
+    
+    st.info(f"📊 Current Status: {total_squares} squares claimed by {len(participant_emails)} participants")
+    
+    # 50-or-less squares notification
+    st.markdown("### 🎲 50-or-Less Squares Rule Notification")
+    st.markdown("Send email to all participants about the doubling rule if we have 50 or fewer squares.")
+    
+    fifty_subject = "🎲 Important Update: Square Doubling Rule + Price Cut for Super Bowl Pool!"
+    fifty_body = """Hey there!
 
-Remember Super Bowl XLIX? Yeah, me neither. I've blocked it out. Therapy is expensive.
+Important update about our Super Bowl Squares pool:
 
-But here's the good news: Super Bowl LX is coming February 8, 2026, and THIS time we're not leaving it up to fate, questionable play-calling, or Malcolm Butler's reflexes. We're leaving it up to MATH and RANDOM NUMBERS! 🎲
+🎲 IF WE HAVE 50 OR FEWER SQUARES:
+I will DOUBLE your squares and randomly assign the additional ones! This means:
+• More chances to win for everyone
+• Adjusted payouts to match the new total
+• REDUCED COST: Only $5 per square (down from $10!)
+• Fair random assignment of bonus squares
 
-Introducing: The Super Bowl Squares Pool That Will Definitely Not Break Your Heart Like That One Play Did!
+Example: If you claimed 3 squares, you'll get 3 MORE randomly assigned squares (6 total)!
+
+💰 ADJUSTED PAYOUTS:
+Payouts will be recalculated based on the final pot to ensure fair distribution:
+• Q1: 10% of total pot
+• Q2: 15% of total pot
+• Q3: 25% of total pot
+• Final: 50% of total pot
+
+⏰ This will be determined before the numbers are randomized at game time.
+
+Questions? Just reply to this email!
+
+Good luck!
+- Michael
+"""
+    
+    with st.expander("📨 Preview 50-or-Less Email"):
+        st.markdown(f"**Subject:** {fifty_subject}")
+        st.markdown("---")
+        st.text(fifty_body)
+    
+    if st.button("📧 Send 50-or-Less Rule Email to All Participants", type="primary", use_container_width=True):
+        if participant_emails:
+            contacts = [{"Name": email.split("@")[0], "Email": email} for email in participant_emails]
+            send_bulk_emails(contacts, fifty_subject, fifty_body)
+        else:
+            st.warning("No participants to email yet!")
+    
+    st.markdown("---")
+    
+    # Original outreach email
+    st.markdown("### 📣 General Outreach Email")
+    subject = "🚨 FINAL HOURS: Mobile-Optimized Super Bowl Squares Pool! (Claim Yours NOW!) 🏈"
+    body = """Hey there, football fans!
+
+🔥 BREAKING NEWS: I just made the Super Bowl Squares pool WAY easier to use on your phone!
+
+📱 NEW MOBILE FEATURES:
+• AI-Powered Square Picker (6 smart strategies!)
+• Compact number grid (no more tiny emoji buttons)
+• Quick Claim dropdowns (pick squares in seconds)
+• Instant grid snapshots (see your picks immediately)
+
+⏰ TIME IS RUNNING OUT!
+Super Bowl LX is February 8, 2026, and squares are filling up FAST. Don't miss your chance to win big!
 
 🎮 Join here: https://futbolislife.streamlit.app
 
 💰 THE DEAL:
-• $10 per square (cheaper than therapy, more fun than yelling at your TV)
-• Pick your squares NOW before your cousin Gary takes all the good ones
-• Numbers randomized before kickoff (totally fair, unlike certain referees)
+• $10 per square (best entertainment value in town)
+• Pick your squares NOW before they're all gone
+• Numbers randomized before kickoff (100% fair)
 • Win cold hard cash for each quarter!
 
 💵 PRIZE BREAKDOWN:
-• Q1: 10% of pot (early bird gets the worm)
-• Q2: 15% of pot (halftime snack money)
-• Q3: 25% of pot (now we're talking)
-• Final: 50% of pot (BIG MONEY, NO WHAMMIES)
+• Q1: 10% of pot (early bird special)
+• Q2: 15% of pot (halftime bonus)
+• Q3: 25% of pot (getting serious now)
+• Final: 50% of pot (THE BIG ONE!)
 
 🏆 LAST YEAR'S WINNERS:
-Luke Rubik, Derek Slusarski, Donny Slotty, and Kyle Ralph all took home cash! Will YOU be next?
+Luke Rubik, Derek Slusarski, Donny Slotty, and Kyle Ralph all cashed in! Will YOU be next?
 
-🦅 SEAHAWKS FAN BONUS:
-If you're still bitter about 2015, this is your chance for redemption. Or at least some cash to ease the pain. Plus, you can play our mini-games while pretending you're calling better plays than... well, you know.
+🤖 AI STRATEGIES (NEW!):
+• 🎲 Totally Random - Classic chaos
+• 🎯 Center Power - Statistically smart
+• 🔲 Spread Out - Maximum coverage
+• ⛔ No Neighbors - Strategic spacing
+• 🚫 Avoid Stacking - Different rows/columns
+• 🍀 Lucky Corners - Edge advantage
 
-🎯 MINI-GAMES INCLUDED:
-• Catch the Football (faster reflexes than you-know-who)
-• Field Goal Kicker (because sometimes you SHOULD kick it)
-• Line Battle (dice-based football - no heartbreak guaranteed!)
+🎮 MINI-GAMES INCLUDED:
+• Catch the Football (test your reflexes)
+• Field Goal Kicker (nail the kick)
+• Line Battle (strategic dice football)
 
 💳 PAYMENT:
 Venmo: @michael-williams-200
-(Please include "Not Still Mad About 2015" in the memo)
+Note: "Football Pool - [number] squares"
 
-Claim your squares before they're gone! And remember: in Super Bowl Squares, EVERYONE has a chance to win. Unlike certain goal-line situations we shall not speak of.
+⏳ DON'T WAIT! Squares are going fast and the mobile experience is now PERFECT for claiming on the go!
 
-Go Hawks! (And also go other teams, I guess) 🏈
+Claim your squares before they're gone! Remember: in Super Bowl Squares, EVERYONE has a chance to win!
 
-P.S. - Yes, I'm a diehard fair-weather Seahawks fan. I only show up when they're winning... or when there's money involved. 💰
+Go Hawks! (And all other teams too!) 🏈
+
+P.S. - The new mobile interface is 🔥. You can literally claim squares while waiting in line at Starbucks. That's the future, folks!
 
 - Michael
 """
     
     # Preview section
-    st.markdown("### 👀 Email Preview")
-    with st.expander("📨 Click to view email content", expanded=True):
+    with st.expander("📨 Preview General Outreach Email"):
         st.markdown(f"**Subject:** {subject}")
         st.markdown("---")
         st.text(body)

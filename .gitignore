@@ -43,3 +43,5 @@ search_syllabus.py
 outreach.csv
 send_invites.py
 new_ideas.py
+send_password_reset.py
+test_openai.py

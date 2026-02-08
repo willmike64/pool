@@ -238,6 +238,10 @@ def squares_page() -> None:
     top_numbers = config.get("top_numbers", list(range(10)))
     side_numbers = config.get("side_numbers", list(range(10)))
 
+    # Initialize grid type preference
+    if "grid_type" not in st.session_state:
+        st.session_state.grid_type = "html"  # Default to HTML grid
+
     # Check if we just claimed a square OR viewing grid
     if st.session_state.get("show_grid_snapshot"):
         show_grid_snapshot(config, all_squares, email)
@@ -247,13 +251,157 @@ def squares_page() -> None:
             st.rerun()
         return
 
-    # View Grid button at top
-    if st.button("🖼️ View Full Grid", use_container_width=True):
-        st.session_state.show_grid_snapshot = True
+    # HTML Grid Click Handler
+    if "html_grid_clicked" in st.session_state and st.session_state.html_grid_clicked:
+        square_id = st.session_state.html_grid_clicked
+        if square_id in all_squares:
+            data = all_squares[square_id]
+            if data.get("claimed_by") == email and not data.get("paid", False):
+                legacy.unclaim_square(square_id)
+        else:
+            legacy.claim_square(square_id)
+        st.session_state.html_grid_clicked = None
         st.rerun()
 
-    st.markdown("### 📍 Quick Claim (mobile friendly)")
-    st.caption("Pick a grid reference and claim the square if it's open.")
+    # Check for query param click
+    try:
+        clicked = st.query_params.get("clicked")
+        if clicked:
+            st.session_state.html_grid_clicked = clicked
+            st.query_params.clear()
+            st.rerun()
+    except:
+        pass
+
+    # Grid Type Toggle
+    st.markdown("### 🎯 Interactive Grid")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("📱 Touch Grid" + (" ✓" if st.session_state.grid_type == "html" else ""), use_container_width=True):
+            st.session_state.grid_type = "html"
+            st.rerun()
+    with col2:
+        if st.button("🔢 Quick Claim" + (" ✓" if st.session_state.grid_type == "quick" else ""), use_container_width=True):
+            st.session_state.grid_type = "quick"
+            st.rerun()
+
+    # Display selected grid type
+    if st.session_state.grid_type == "html":
+        # HTML Touch Grid
+        grid_html = f"""
+        <style>
+        .html-grid {{
+            display: grid;
+            grid-template-columns: 30px repeat(10, 1fr);
+            gap: 2px;
+            max-width: 100%;
+            margin: 20px auto;
+            font-size: 12px;
+        }}
+        .grid-cell {{
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #444;
+            cursor: pointer;
+            font-size: 20px;
+            transition: transform 0.2s;
+        }}
+        .grid-cell:hover {{
+            transform: scale(1.1);
+            z-index: 10;
+        }}
+        .grid-header {{
+            background: #2d2d2d;
+            font-weight: bold;
+            color: #ffd700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+        .grid-unclaimed {{
+            background: #f0f0f0;
+            animation: pulse-html 2s infinite;
+        }}
+        .grid-claimed {{
+            background: #444;
+        }}
+        .grid-paid {{
+            background: #444;
+            border: 2px solid #00ff00;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+        }}
+        .grid-mine {{
+            background: #555;
+            border: 2px solid #ffd700;
+        }}
+        @keyframes pulse-html {{
+            0%, 100% {{ opacity: 1; }}
+            50% {{ opacity: 0.6; }}
+        }}
+        @media (max-width: 768px) {{
+            .html-grid {{
+                font-size: 10px;
+            }}
+            .grid-cell {{
+                font-size: 16px;
+            }}
+        }}
+        </style>
+        <div class="html-grid">
+            <div class="grid-header"></div>
+        """
+        
+        # Top numbers header
+        for num in top_numbers:
+            grid_html += f'<div class="grid-header">{num}</div>'
+        
+        # Grid rows
+        for i in range(10):
+            # Side number
+            grid_html += f'<div class="grid-header">{side_numbers[i]}</div>'
+            
+            # Squares
+            for j in range(10):
+                square_id = f"{i}-{j}"
+                if square_id in all_squares:
+                    data = all_squares[square_id]
+                    avatar = data.get("avatar", "❌")
+                    claimed_by = data.get("claimed_by")
+                    paid = data.get("paid", False)
+                    
+                    if paid:
+                        css_class = "grid-paid"
+                        display = f"✅{avatar}"
+                    elif claimed_by == email:
+                        css_class = "grid-mine"
+                        display = avatar
+                    else:
+                        css_class = "grid-claimed"
+                        display = avatar
+                    
+                    grid_html += f'<div class="grid-cell {css_class}" onclick="handleSquareClick(\'{square_id}\')">{ display}</div>'
+                else:
+                    grid_html += f'<div class="grid-cell grid-unclaimed" onclick="handleSquareClick(\'{square_id}\')">⬜</div>'
+        
+        grid_html += """
+        </div>
+        <script>
+        function handleSquareClick(squareId) {
+            const url = new URL(window.location);
+            url.searchParams.set('clicked', squareId);
+            window.location.href = url.toString();
+        }
+        </script>
+        """
+        
+        st.markdown(grid_html, unsafe_allow_html=True)
+        st.caption(f"💡 Tap any square to claim/unclaim • {top_team} (top) × {side_team} (side)")
+    
+    else:
+        # Quick Claim Mode
+        st.caption("Pick a grid reference and claim the square if it's open.")
 
     # Number Grid - Compact view
     # Create player number mapping
@@ -309,52 +457,51 @@ def squares_page() -> None:
     
     st.markdown(html, unsafe_allow_html=True)
 
-    c1, c2 = st.columns(2)
-    with c1:
-        nfc_digit = st.selectbox(f"{top_team} (top) grid reference", top_numbers, key="qc_nfc")
-    with c2:
-        afc_digit = st.selectbox(f"{side_team} (side) grid reference", side_numbers, key="qc_afc")
+    if st.session_state.grid_type == "quick":
+        c1, c2 = st.columns(2)
+        with c1:
+            nfc_digit = st.selectbox(f"{top_team} (top) grid reference", top_numbers, key="qc_nfc")
+        with c2:
+            afc_digit = st.selectbox(f"{side_team} (side) grid reference", side_numbers, key="qc_afc")
 
-    # Translate digits -> the underlying grid id (row-col)
-    square_id = None
-    try:
-        col = list(top_numbers).index(nfc_digit)
-        row = list(side_numbers).index(afc_digit)
-        square_id = f"{row}-{col}"
-    except Exception:
+        # Translate digits -> the underlying grid id (row-col)
         square_id = None
+        try:
+            col = list(top_numbers).index(nfc_digit)
+            row = list(side_numbers).index(afc_digit)
+            square_id = f"{row}-{col}"
+        except Exception:
+            square_id = None
 
-    if square_id is None:
-        st.error("Couldn't map those digits to a square. Try again.")
-    else:
-        data = all_squares.get(square_id)
-        if not data:
-            st.success(f"✅ Available: {side_team} {afc_digit}  ×  {top_team} {nfc_digit}")
-            if st.button("Claim this square", use_container_width=True):
-                legacy.claim_square(square_id)
-                st.session_state.show_grid_snapshot = True
-                st.rerun()
+        if square_id is None:
+            st.error("Couldn't map those digits to a square. Try again.")
         else:
-            owner = data.get("claimed_by", "Unknown")
-            avatar = data.get("avatar", "❓")
-            paid = bool(data.get("paid", False))
-
-            if owner == email:
-                st.info(
-                    f"You already own this square: {avatar} "
-                    f"({side_team} {afc_digit} × {top_team} {nfc_digit})"
-                    + (" • ✅ paid" if paid else " • 💸 not paid")
-                )
-                if st.button("Unclaim this square", use_container_width=True):
-                    legacy.unclaim_square(square_id)
+            data = all_squares.get(square_id)
+            if not data:
+                st.success(f"✅ Available: {side_team} {afc_digit}  ×  {top_team} {nfc_digit}")
+                if st.button("Claim this square", use_container_width=True):
+                    legacy.claim_square(square_id)
+                    st.session_state.show_grid_snapshot = True
                     st.rerun()
             else:
-                st.warning(
-                    f"Taken by {owner.split('@')[0]} {avatar}"
-                    + (" • ✅ paid" if paid else "")
-                )
+                owner = data.get("claimed_by", "Unknown")
+                avatar = data.get("avatar", "❓")
+                paid = bool(data.get("paid", False))
 
-    st.markdown("---")
+                if owner == email:
+                    st.info(
+                        f"You already own this square: {avatar} "
+                        f"({side_team} {afc_digit} × {top_team} {nfc_digit})"
+                        + (" • ✅ paid" if paid else " • 💸 not paid")
+                    )
+                    if st.button("Unclaim this square", use_container_width=True):
+                        legacy.unclaim_square(square_id)
+                        st.rerun()
+                else:
+                    st.warning(
+                        f"Taken by {owner.split('@')[0]} {avatar}"
+                        + (" • ✅ paid" if paid else "")
+                    )
     st.markdown("### 🤖 AI-Powered Random Pick")
     st.caption("Let AI help you pick the best squares!")
     
