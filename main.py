@@ -101,15 +101,21 @@ def login_user():
             st.success(f"Welcome back, {email}!")
             st.rerun()
         except Exception as e:
-            try:
-                user = auth.create_user_with_email_and_password(email, password)
-                st.session_state.user = user
-                st.session_state.email = email
-                st.success(f"Account created! Welcome, {email}!")
-                st.rerun()
-            except Exception as e2:
-                st.error(f"Error: {str(e2)}")
-                st.info("Make sure Email/Password authentication is enabled in Firebase Console")
+            error_msg = str(e)
+            if "INVALID_PASSWORD" in error_msg or "INVALID_LOGIN_CREDENTIALS" in error_msg:
+                st.error("Invalid email or password")
+            elif "EMAIL_NOT_FOUND" in error_msg:
+                # Try to create new account
+                try:
+                    user = auth.create_user_with_email_and_password(email, password)
+                    st.session_state.user = user
+                    st.session_state.email = email
+                    st.success(f"Account created! Welcome, {email}!")
+                    st.rerun()
+                except Exception as e2:
+                    st.error(f"Error creating account: {str(e2)}")
+            else:
+                st.error("Login failed. Please check your credentials.")
 
 # --------------- Avatar / Icons -----------------
 
@@ -176,6 +182,65 @@ def draw_grid():
     squares = get_all_squares()
     email = st.session_state.get("email")
     is_admin = email == "mwill1003@gmail.com"
+    
+    # Fetch live score
+    live_score = fetch_superbowl_live_score()
+    if live_score and live_score["in_progress"]:
+        st.success(f"🔴 LIVE: {live_score['away_team']} {live_score['away_score']} - {live_score['home_team']} {live_score['home_score']} | Q{live_score['quarter']} {live_score['clock']}")
+        
+        # Auto-update winners based on live score
+        if is_admin:
+            if st.button("🔄 Auto-Update Winners from Live Score"):
+                auto_update_winners(live_score, config)
+    elif live_score:
+        st.info(f"📅 {live_score['away_team']} vs {live_score['home_team']} - {live_score['status']}")
+    
+    # Display Quarter Winners at top
+    top_numbers = config.get("top_numbers", list(range(10)))
+    side_numbers = config.get("side_numbers", list(range(10)))
+    winners = config.get("winners", {})
+    
+    if any(winners.values()) or live_score:
+        st.markdown("### 🏆 Quarter Winners")
+        winner_cols = st.columns(4)
+        
+        # Calculate current leader if game is live
+        current_leader = None
+        if live_score and live_score["in_progress"]:
+            away_last = live_score["away_score"] % 10
+            home_last = live_score["home_score"] % 10
+            quarter = live_score["quarter"]
+            
+            # Find current winning square
+            try:
+                col_idx = top_numbers.index(away_last)
+                row_idx = side_numbers.index(home_last)
+                current_square_id = f"{row_idx}-{col_idx}"
+                if current_square_id in squares:
+                    current_leader = {
+                        "square_id": current_square_id,
+                        "email": squares[current_square_id].get("claimed_by", "Unclaimed"),
+                        "avatar": squares[current_square_id].get("avatar", "❓"),
+                        "quarter": f"Q{quarter}"
+                    }
+            except:
+                pass
+        
+        for idx, (quarter, data) in enumerate([("Q1", winners.get("Q1")), ("Q2", winners.get("Q2")), ("Q3", winners.get("Q3")), ("Final", winners.get("Final"))]):
+            with winner_cols[idx]:
+                if data:
+                    st.markdown(f"**{quarter}**")
+                    st.markdown(f"{data.get('winner_avatar', '❓')} {data.get('winner_email', 'Unclaimed').split('@')[0]}")
+                    st.markdown(f"Score: {data.get('nfc', 0)}-{data.get('afc', 0)}")
+                elif current_leader and current_leader["quarter"] == quarter:
+                    st.markdown(f"**{quarter} 🔴 LIVE**")
+                    st.markdown(f"{current_leader['avatar']} {current_leader['email'].split('@')[0]}")
+                    st.markdown(f"Score: {live_score['away_score']}-{live_score['home_score']}")
+                else:
+                    st.markdown(f"**{quarter}**")
+                    st.markdown("Not set")
+        
+        st.markdown("---")
     
     # Add custom CSS for square styling
     st.markdown("""
@@ -329,12 +394,11 @@ def draw_grid():
         st.markdown('</div>', unsafe_allow_html=True)
     
     # Display Payouts
-    st.markdown("---")
     st.markdown("### 💰 Prize Payouts")
     
-    # Calculate total pot from paid squares
+    # Calculate total pot from ORIGINAL paid squares only (not bonus squares)
     all_squares = get_all_squares()
-    paid_count = sum(1 for data in all_squares.values() if data.get("paid", False))
+    paid_count = sum(1 for data in all_squares.values() if data.get("paid", False) and not data.get("doubled", False))
     total_pot = paid_count * 10
     
     # Calculate payouts based on percentages
@@ -343,7 +407,8 @@ def draw_grid():
     q3_payout = int(total_pot * 0.25)
     final_payout = int(total_pot * 0.50)
     
-    st.info(f"🎫 {paid_count} paid squares = ${total_pot} total pot")
+    total_squares = len(all_squares)
+    st.info(f"🎫 {paid_count} paid squares (${total_pot} pot) + {total_squares - paid_count} bonus squares = {total_squares} total squares")
     
     payout_cols = st.columns(4)
     payouts = [("Q1", q1_payout, "10%"), ("Q2", q2_payout, "15%"), ("Q3", q3_payout, "25%"), ("Final", final_payout, "50%")]
@@ -352,18 +417,45 @@ def draw_grid():
             st.markdown(f"**{quarter}** ({pct})")
             st.markdown(f"<h2 style='text-align: center; color: #00ff00;'>${amount}</h2>", unsafe_allow_html=True)
     
-    # Display Winners
+    # Display Winners with live score highlighting
     winners = config.get("winners", {})
-    if any(winners.values()):
+    if any(winners.values()) or live_score:
         st.markdown("---")
         st.markdown("### 🏆 Quarter Winners")
         winner_cols = st.columns(4)
+        
+        # Calculate current leader if game is live
+        current_leader = None
+        if live_score and live_score["in_progress"]:
+            away_last = live_score["away_score"] % 10
+            home_last = live_score["home_score"] % 10
+            quarter = live_score["quarter"]
+            
+            # Find current winning square
+            try:
+                col_idx = top_numbers.index(away_last)
+                row_idx = side_numbers.index(home_last)
+                current_square_id = f"{row_idx}-{col_idx}"
+                if current_square_id in squares:
+                    current_leader = {
+                        "square_id": current_square_id,
+                        "email": squares[current_square_id].get("claimed_by", "Unclaimed"),
+                        "avatar": squares[current_square_id].get("avatar", "❓"),
+                        "quarter": f"Q{quarter}"
+                    }
+            except:
+                pass
+        
         for idx, (quarter, data) in enumerate([("Q1", winners.get("Q1")), ("Q2", winners.get("Q2")), ("Q3", winners.get("Q3")), ("Final", winners.get("Final"))]):
             with winner_cols[idx]:
                 if data:
                     st.markdown(f"**{quarter}**")
                     st.markdown(f"{data.get('winner_avatar', '❓')} {data.get('winner_email', 'Unclaimed').split('@')[0]}")
                     st.markdown(f"Score: {data.get('nfc', 0)}-{data.get('afc', 0)}")
+                elif current_leader and current_leader["quarter"] == quarter:
+                    st.markdown(f"**{quarter} 🔴 LIVE**")
+                    st.markdown(f"{current_leader['avatar']} {current_leader['email'].split('@')[0]}")
+                    st.markdown(f"Score: {live_score['away_score']}-{live_score['home_score']}")
                 else:
                     st.markdown(f"**{quarter}**")
                     st.markdown("Not set")
@@ -587,6 +679,40 @@ def set_quarter_winner(quarter, nfc_score, afc_score, top_numbers, side_numbers)
         st.success(f"{quarter} Winner: {winner_avatar} {winner_email.split('@')[0]} (Square {nfc_score}-{afc_score})")
     except ValueError:
         st.error("Invalid score - number not found in grid!")
+
+def auto_update_winners(live_score, config):
+    """Automatically update winners based on live score"""
+    top_numbers = config.get("top_numbers", list(range(10)))
+    side_numbers = config.get("side_numbers", list(range(10)))
+    
+    away_last = live_score["away_score"] % 10
+    home_last = live_score["home_score"] % 10
+    quarter = live_score["quarter"]
+    
+    # Determine which team is NFC/AFC based on config
+    away_team = live_score["away_team"]
+    home_team = live_score["home_team"]
+    top_team = config.get("top_team", "NFC Team")
+    
+    # Simple mapping - you may need to adjust based on actual teams
+    if "NFC" in top_team or away_team in ["PHI", "SF", "DAL", "GB", "TB", "LAR", "SEA"]:
+        nfc_score = away_last
+        afc_score = home_last
+    else:
+        nfc_score = home_last
+        afc_score = away_last
+    
+    # Update appropriate quarter
+    if quarter == 1:
+        set_quarter_winner("Q1", nfc_score, afc_score, top_numbers, side_numbers)
+    elif quarter == 2:
+        set_quarter_winner("Q2", nfc_score, afc_score, top_numbers, side_numbers)
+    elif quarter == 3:
+        set_quarter_winner("Q3", nfc_score, afc_score, top_numbers, side_numbers)
+    elif quarter >= 4:
+        set_quarter_winner("Final", nfc_score, afc_score, top_numbers, side_numbers)
+    
+    st.rerun()
 
 # --------------- Games Page -----------------
 
@@ -1651,6 +1777,57 @@ def show_odds_ticker():
         unsafe_allow_html=True
     )
 
+@st.cache_data(ttl=30)  # Cache for 30 seconds
+def fetch_superbowl_live_score():
+    """Fetch live Super Bowl score from ESPN API"""
+    try:
+        # ESPN API for NFL scores
+        url = "http://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Find Super Bowl game (look for championship game in February)
+        for event in data.get("events", []):
+            competitions = event.get("competitions", [])
+            if not competitions:
+                continue
+            
+            competition = competitions[0]
+            
+            # Check if it's a championship/playoff game
+            notes = competition.get("notes", [])
+            is_superbowl = any("Super Bowl" in note.get("headline", "") for note in notes)
+            
+            if is_superbowl or (event.get("season", {}).get("type") == 3):  # Type 3 = Postseason
+                competitors = competition.get("competitors", [])
+                if len(competitors) != 2:
+                    continue
+                
+                # Get teams and scores
+                away_team = competitors[0] if competitors[0].get("homeAway") == "away" else competitors[1]
+                home_team = competitors[1] if competitors[1].get("homeAway") == "home" else competitors[0]
+                
+                status = competition.get("status", {})
+                game_status = status.get("type", {}).get("description", "Scheduled")
+                period = status.get("period", 0)
+                clock = status.get("displayClock", "0:00")
+                
+                return {
+                    "away_team": away_team.get("team", {}).get("abbreviation", "AWAY"),
+                    "away_score": int(away_team.get("score", 0)),
+                    "home_team": home_team.get("team", {}).get("abbreviation", "HOME"),
+                    "home_score": int(home_team.get("score", 0)),
+                    "quarter": period,
+                    "clock": clock,
+                    "status": game_status,
+                    "in_progress": status.get("type", {}).get("state") == "in"
+                }
+        
+        return None
+    except Exception as e:
+        return None
+
 @st.cache_data(ttl=3600)
 def fetch_superbowl_odds():
     try:
@@ -1712,7 +1889,13 @@ def show_user_stats():
     email = st.session_state.get("email")
     is_admin = email == "mwill1003@gmail.com"
     squares = db.collection("squares").where(filter=FieldFilter("claimed_by", "==", email)).stream()
-    claimed = [s.id for s in squares]
+    
+    # Only count original squares for payment
+    claimed = []
+    for s in squares:
+        data = s.to_dict()
+        if not data.get("doubled", False):
+            claimed.append(s.id)
     
     # Avatar Picker - only if user has claimed squares
     if claimed:
@@ -1804,9 +1987,12 @@ def show_user_stats():
         for square_id, data in all_squares.items():
             player_email = data.get("claimed_by")
             paid = data.get("paid", False)
-            if player_email not in players_payment:
-                players_payment[player_email] = {"count": 0, "paid": paid}
-            players_payment[player_email]["count"] += 1
+            is_bonus = data.get("doubled", False)
+            # Only count original squares for payment tracking
+            if not is_bonus:
+                if player_email not in players_payment:
+                    players_payment[player_email] = {"count": 0, "paid": paid}
+                players_payment[player_email]["count"] += 1
         
         for player_email, info in sorted(players_payment.items()):
             name = player_email.split("@")[0]

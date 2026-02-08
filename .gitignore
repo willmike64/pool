@@ -45,3 +45,6 @@ send_invites.py
 new_ideas.py
 send_password_reset.py
 test_openai.py
+backups/
+double_squares.py
+reset_user_password.py

@@ -237,6 +237,55 @@ def squares_page() -> None:
     side_team = config.get("side_team", "AFC Team")
     top_numbers = config.get("top_numbers", list(range(10)))
     side_numbers = config.get("side_numbers", list(range(10)))
+    
+    # Fetch live score
+    live_score = legacy.fetch_superbowl_live_score()
+    if live_score and live_score["in_progress"]:
+        st.success(f"🔴 LIVE: {live_score['away_team']} {live_score['away_score']} - {live_score['home_team']} {live_score['home_score']} | Q{live_score['quarter']} {live_score['clock']}")
+    elif live_score:
+        st.info(f"📅 {live_score['away_team']} vs {live_score['home_team']} - {live_score['status']}")
+    
+    # Display Quarter Winners at top
+    winners = config.get("winners", {})
+    if any(winners.values()) or live_score:
+        st.markdown("### 🏆 Quarter Winners")
+        winner_cols = st.columns(4)
+        
+        # Calculate current leader if game is live
+        current_leader = None
+        if live_score and live_score["in_progress"]:
+            away_last = live_score["away_score"] % 10
+            home_last = live_score["home_score"] % 10
+            quarter = live_score["quarter"]
+            
+            try:
+                col_idx = top_numbers.index(away_last)
+                row_idx = side_numbers.index(home_last)
+                current_square_id = f"{row_idx}-{col_idx}"
+                if current_square_id in all_squares:
+                    current_leader = {
+                        "email": all_squares[current_square_id].get("claimed_by", "Unclaimed"),
+                        "avatar": all_squares[current_square_id].get("avatar", "❓"),
+                        "quarter": f"Q{quarter}"
+                    }
+            except:
+                pass
+        
+        for idx, (quarter, data) in enumerate([("Q1", winners.get("Q1")), ("Q2", winners.get("Q2")), ("Q3", winners.get("Q3")), ("Final", winners.get("Final"))]):
+            with winner_cols[idx]:
+                if data:
+                    st.markdown(f"**{quarter}**")
+                    st.markdown(f"{data.get('winner_avatar', '❓')} {data.get('winner_email', 'Unclaimed').split('@')[0]}")
+                    st.markdown(f"Score: {data.get('nfc', 0)}-{data.get('afc', 0)}")
+                elif current_leader and current_leader["quarter"] == quarter:
+                    st.markdown(f"**{quarter} 🔴 LIVE**")
+                    st.markdown(f"{current_leader['avatar']} {current_leader['email'].split('@')[0]}")
+                    st.markdown(f"Score: {live_score['away_score']}-{live_score['home_score']}")
+                else:
+                    st.markdown(f"**{quarter}**")
+                    st.markdown("Not set")
+        
+        st.markdown("---")
 
     # Initialize grid type preference
     if "grid_type" not in st.session_state:
@@ -389,9 +438,8 @@ def squares_page() -> None:
         </div>
         <script>
         function handleSquareClick(squareId) {
-            const url = new URL(window.location);
-            url.searchParams.set('clicked', squareId);
-            window.location.href = url.toString();
+            // Force a full page reload with the clicked parameter
+            window.location.href = window.location.pathname + '?page=squares&clicked=' + squareId;
         }
         </script>
         """
@@ -656,15 +704,18 @@ def squares_page() -> None:
     st.markdown("---")
     st.markdown("### 🧾 Pot & payouts")
 
-    paid_count = sum(1 for d in all_squares.values() if (d or {}).get("paid", False))
+    # Calculate pot from ORIGINAL paid squares only (not bonus squares)
+    paid_count = sum(1 for d in all_squares.values() if d.get("paid", False) and not d.get("doubled", False))
     total_pot = paid_count * 10
+    total_squares = len(all_squares)
+    bonus_squares = total_squares - paid_count
 
     q1_payout = int(total_pot * 0.10)
     q2_payout = int(total_pot * 0.15)
     q3_payout = int(total_pot * 0.25)
     final_payout = int(total_pot * 0.50)
 
-    st.write(f"🎫 **{paid_count}** paid squares → **${total_pot}** total pot")
+    st.write(f"🎫 **{paid_count}** paid squares (${total_pot} pot) + **{bonus_squares}** bonus squares = **{total_squares}** total")
 
     p1, p2 = st.columns(2)
     with p1:
@@ -673,19 +724,6 @@ def squares_page() -> None:
     with p2:
         st.metric("Q2 (15%)", f"${q2_payout}")
         st.metric("Final (50%)", f"${final_payout}")
-
-    winners = config.get("winners", {}) or {}
-    if any(winners.values()):
-        st.markdown("---")
-        st.markdown("### 🏆 Winners")
-        for quarter in ["Q1", "Q2", "Q3", "Final"]:
-            w = winners.get(quarter)
-            if not w:
-                st.write(f"**{quarter}**: not set")
-                continue
-            name = (w.get("winner_email") or "Unclaimed").split("@")[0]
-            avatar = w.get("winner_avatar", "❓")
-            st.write(f"**{quarter}**: {avatar} {name} — score {w.get('nfc')}-{w.get('afc')}")
 
     # Games button
     st.markdown("---")
