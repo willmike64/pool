@@ -239,8 +239,13 @@ def squares_page() -> None:
     side_numbers = config.get("side_numbers", list(range(10)))
     
     # Fetch live score
-    live_score = legacy.fetch_superbowl_live_score()
-    if live_score and live_score["in_progress"]:
+    live_score = None
+    try:
+        live_score = legacy.fetch_superbowl_live_score()
+    except:
+        pass
+    
+    if live_score and live_score.get("in_progress"):
         st.success(f"🔴 LIVE: {live_score['away_team']} {live_score['away_score']} - {live_score['home_team']} {live_score['home_score']} | Q{live_score['quarter']} {live_score['clock']}")
     elif live_score:
         st.info(f"📅 {live_score['away_team']} vs {live_score['home_team']} - {live_score['status']}")
@@ -253,7 +258,7 @@ def squares_page() -> None:
         
         # Calculate current leader if game is live
         current_leader = None
-        if live_score and live_score["in_progress"]:
+        if live_score and live_score.get("in_progress"):
             away_last = live_score["away_score"] % 10
             home_last = live_score["home_score"] % 10
             quarter = live_score["quarter"]
